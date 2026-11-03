@@ -1,0 +1,14 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/avviso-tmux.sh status"
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/avviso-tmux.sh start" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "~/.claude/avviso-tmux.sh minuto" } ] }
+    ]
+  }
+}

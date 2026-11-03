@@ -1,0 +1,193 @@
+#!/bin/bash
+# lavori - gestione dei lavori (progetti) di Claude Code nel terminale, con tmux.
+# https://github.com/iacopo-cmd/claude-code-terminale-tmux  -  LEGGERE LE AVVERTENZE NEL README.
+#
+# Un LAVORO = una cartella + una sessione tmux con Claude dentro.
+#  - Claude Code tiene conversazioni e memoria PER CARTELLA (~/.claude/projects/<cartella>/) e legge il
+#    CLAUDE.md della cartella all'avvio: cartelle diverse = contesti separati.
+#  - tmux tiene viva la sessione se cade l'SSH: ci si riattacca e Claude e' ancora li'.
+#  - Separa il CONTESTO, non i PERMESSI: tutte le sessioni girano come root.
+#
+# Comandi:
+#   lavori                                elenco dei lavori, con stato
+#   lavori <nome> [id-conversazione]      apre il lavoro (riattacca la sessione o la crea; con l'id riprende
+#                                         quella conversazione invece dell'ultima)
+#   lavori nuovo <nome> <cartella> ["descrizione"]   crea un lavoro (cartella e CLAUDE.md se mancano)
+#   lavori info <nome>                    dettagli: cartella, CLAUDE.md, memoria, conversazioni con gli id
+#   lavori descrivi <nome> "descrizione"  cambia la descrizione
+#   lavori togli <nome>                   toglie dall'indice (NON cancella cartella ne' conversazioni)
+#   lavori aiuto                          questo testo
+#
+# Indice:    /etc/lavori/indice.tsv  (nome, sessione tmux, cartella, creato, ultimo uso, descrizione)
+#            copia prima di ogni modifica in /etc/lavori/indice.tsv.prima; blocco con flock
+# Registro:  /var/log/lavori.log    (aperture, creazioni, rimozioni)
+# In tmux:   Ctrl-b d = staccati senza chiudere   Ctrl-b s = passa a un altro lavoro
+set -uo pipefail
+
+DIR=${LAVORI_DIR:-/etc/lavori}
+INDICE=$DIR/indice.tsv
+BLOCCO=$DIR/.blocco
+REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
+CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
+PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
+INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
+RISERVATI=" nuovo info descrivi togli aiuto elenco help "
+
+errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
+registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
+ora() { date '+%Y-%m-%d %H:%M'; }
+
+prepara() {
+    [ "$(id -u)" -eq 0 ] || errore "va lanciato come root"
+    command -v tmux >/dev/null || errore "tmux non installato"
+    mkdir -p "$DIR" && chmod 700 "$DIR"
+    if [ ! -s "$INDICE" ]; then   # primo avvio: indice vuoto
+        echo "$INTESTAZIONE" > "$INDICE"
+        chmod 600 "$INDICE"
+        registra "indice creato"
+    fi
+}
+
+# Legge l'indice senza intestazione e righe vuote
+righe() { grep -v '^#' "$INDICE" | grep -v '^[[:space:]]*$' || true; }
+campo() { righe | awk -F'\t' -v n="$1" -v c="$2" '$1 == n { print $c; exit }'; }
+esiste() { [ -n "$(campo "$1" 1)" ]; }
+
+# Modifica l'indice in modo sicuro: blocco, copia, scrittura su file temporaneo, sostituzione
+modifica() {   # modifica <comando awk che legge stdin e scrive il nuovo indice>
+    exec 9>"$BLOCCO"
+    flock -w 10 9 || errore "indice occupato da un altro comando, riprova"
+    cp -p "$INDICE" "$INDICE.prima"
+    if awk -F'\t' -v OFS='\t' "$@" "$INDICE" > "$INDICE.nuovo" && [ -s "$INDICE.nuovo" ]; then
+        chmod 600 "$INDICE.nuovo" && mv "$INDICE.nuovo" "$INDICE"
+    else
+        rm -f "$INDICE.nuovo"; errore "modifica dell'indice non riuscita (indice invariato)"
+    fi
+    exec 9>&-
+}
+
+cartella_claude() { printf '%s/%s' "$PROGETTI_CLAUDE" "$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g')"; }
+aperta() { tmux has-session -t "=$1" 2>/dev/null; }
+
+elenco() {
+    printf '%-10s %-8s %-28s %-17s %s\n' "LAVORO" "STATO" "CARTELLA" "ULTIMO USO" "DESCRIZIONE"
+    righe | while IFS=$'\t' read -r nome sess cart creato uso descr; do
+        if aperta "$sess"; then stato="● aperto"; else stato="  chiuso"; fi
+        [ -d "$cart" ] || stato="✗ manca"
+        printf '%-10s %-8s %-28s %-17s %s\n' "$nome" "$stato" "$cart" "$uso" "$descr"
+    done
+    echo
+    echo "Apri: lavori <nome>    Nuovo: lavori nuovo <nome> <cartella> \"descrizione\"    Dettagli: lavori info <nome>"
+}
+
+info() {
+    local nome=$1; esiste "$nome" || errore "lavoro sconosciuto: $nome (elenco: lavori)"
+    local sess cart cc
+    sess=$(campo "$nome" 2); cart=$(campo "$nome" 3); cc=$(cartella_claude "$cart")
+    echo "Lavoro:       $nome — $(campo "$nome" 6)"
+    echo "Cartella:     $cart $([ -d "$cart" ] || echo '(NON ESISTE)')"
+    echo "Sessione:     tmux \"$sess\" $(aperta "$sess" && echo '(aperta)' || echo '(chiusa)')"
+    echo "Creato:       $(campo "$nome" 4)    ultimo uso: $(campo "$nome" 5)"
+    echo "CLAUDE.md:    $([ -f "$cart/CLAUDE.md" ] && echo "$cart/CLAUDE.md ($(wc -l < "$cart/CLAUDE.md") righe)" || echo 'manca')"
+    echo "Memoria:      $([ -d "$cc/memory" ] && echo "$cc/memory ($(find "$cc/memory" -name '*.md' | wc -l) file)" || echo 'nessuna')"
+    echo "Conversazioni (ultima in cima; per riprenderne una: lavori $nome <id>):"
+    if compgen -G "$cc/*.jsonl" >/dev/null; then
+        ls -t "$cc"/*.jsonl | head -10 | while read -r f; do
+            printf '  %s  %s  %s\n' "$(basename "$f" .jsonl)" "$(date -r "$f" '+%Y-%m-%d %H:%M')" "$(du -h "$f" | cut -f1)"
+        done
+    else
+        echo "  nessuna"
+    fi
+}
+
+nuovo() {
+    local nome=${1:-} cart=${2:-} descr=${3:-}
+    [ -n "$nome" ] && [ -n "$cart" ] || errore "uso: lavori nuovo <nome> <cartella> [\"descrizione\"]"
+    [[ "$nome" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]] || errore "nome non valido: minuscole, numeri, - e _ (max 24), es. sito-casa"
+    [[ "$RISERVATI" == *" $nome "* ]] && errore "nome riservato: $nome"
+    esiste "$nome" && errore "esiste gia': $nome -> $(campo "$nome" 3)"
+    [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
+    cart=$(realpath -m -- "$cart")
+    case "$cart" in /|/etc|/usr|/bin|/sbin|/var|/proc|/sys|/dev|/boot) errore "cartella non adatta: $cart" ;; esac
+    righe | awk -F'\t' -v c="$cart" '$3 == c { found=1 } END { exit !found }' && \
+        errore "cartella gia' usata da un altro lavoro: $cart (stessa cartella = stesso contesto di Claude)"
+    aperta "$nome" && errore "esiste gia' una sessione tmux \"$nome\" fuori dall'indice: chiudila o usa un altro nome"
+    mkdir -p -- "$cart" || errore "non riesco a creare $cart"
+    if [ ! -e "$cart/CLAUDE.md" ]; then
+        cat > "$cart/CLAUDE.md" <<EOF
+# Lavoro $nome
+
+${descr:-(descrizione da scrivere)}
+
+Lavoro SEPARATO dagli altri: qui si lavora solo su questo (cartella $cart).
+Rispondere in italiano, dando del tu, breve e tecnico.
+
+## Regole
+- Una cosa alla volta e solo dopo l'ok.
+- Backup prima di modificare.
+
+## Stato
+(da tenere aggiornato)
+EOF
+        echo "Creato $cart/CLAUDE.md: completalo, Claude lo legge all'avvio."
+    fi
+    modifica -v n="$nome" -v c="$cart" -v t="$(ora)" -v d="${descr:--}" \
+        '{ print } END { print n, n, c, t, "-", d }'
+    registra "nuovo $nome -> $cart"
+    echo "Lavoro creato: $nome -> $cart.  Aprilo con: lavori $nome"
+}
+
+descrivi() {
+    local nome=${1:-} descr=${2:-}
+    esiste "$nome" || errore "lavoro sconosciuto: $nome"
+    [ -n "$descr" ] || errore "uso: lavori descrivi <nome> \"descrizione\""
+    [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
+    modifica -v n="$nome" -v d="$descr" '$1 == n { $6 = d } { print }'
+    echo "Descrizione di $nome aggiornata."
+}
+
+togli() {
+    local nome=${1:-}
+    esiste "$nome" || errore "lavoro sconosciuto: $nome"
+    local cart; cart=$(campo "$nome" 3)
+    read -r -p "Togliere \"$nome\" dall'indice? Cartella ($cart) e conversazioni restano. [s/N] " r
+    [[ "$r" =~ ^[sS]$ ]] || { echo "Annullato."; exit 0; }
+    modifica -v n="$nome" '$1 != n { print }'
+    registra "tolto $nome ($cart)"
+    echo "Tolto. Per rimetterlo: lavori nuovo $nome $cart"
+}
+
+apri() {
+    local nome=$1 id=${2:-}
+    esiste "$nome" || { echo "lavori: lavoro sconosciuto: $nome" >&2; echo; elenco; exit 1; }
+    local sess cart; sess=$(campo "$nome" 2); cart=$(campo "$nome" 3)
+    [ -d "$cart" ] || errore "la cartella non esiste: $cart"
+    [ -z "$id" ] || [[ "$id" =~ ^[0-9a-f-]{36}$ ]] || errore "id di conversazione non valido: $id (vedi: lavori info $nome)"
+    modifica -v n="$nome" -v t="$(ora)" '$1 == n { $5 = t } { print }'
+    if aperta "$sess"; then
+        [ -n "$id" ] && echo "La sessione \"$sess\" e' gia' aperta: ci entro (l'id serve solo se la sessione e' chiusa)."
+        registra "apri $nome (riattacca)"
+        if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
+        exec tmux attach -t "=$sess"
+    fi
+    local cmd
+    if [ -n "$id" ]; then cmd="'$CLAUDE_BIN' --resume $id"
+    else cmd="'$CLAUDE_BIN' --continue || '$CLAUDE_BIN'"; fi   # ultima conversazione della cartella, o una nuova
+    local fine="echo; echo 'Claude chiuso. Invio per chiudere la sessione $sess (lavori $nome per riaprirla).'; read"
+    registra "apri $nome (nuova sessione${id:+, conversazione $id})"
+    tmux new-session -d -s "$sess" -c "$cart" "cd '$cart' && $cmd; $fine" || errore "tmux non e' riuscito a creare la sessione"
+    if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
+    exec tmux attach -t "=$sess"
+}
+
+prepara
+case "${1:-}" in
+    ""|elenco)          elenco ;;
+    aiuto|-h|--help|help) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;
+    nuovo)              shift; nuovo "$@" ;;
+    info)               [ -n "${2:-}" ] || errore "uso: lavori info <nome>"; info "$2" ;;
+    descrivi)           shift; descrivi "$@" ;;
+    togli)              shift; togli "$@" ;;
+    -*)                 errore "opzione sconosciuta: $1 (lavori aiuto)" ;;
+    *)                  apri "$@" ;;
+esac
