@@ -1,5 +1,7 @@
 # claude-code-terminale-tmux
 
+🇮🇹 **Italiano** · 🇬🇧 [English](README.en.md)
+
 Script di shell per **Claude Code nel terminale**: un progetto per sessione **tmux**, sessioni che **non si perdono
 se cade l'SSH**, e un **indice dei lavori** per crearli e riaprirli con un comando.
 
