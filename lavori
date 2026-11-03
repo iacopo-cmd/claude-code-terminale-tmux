@@ -9,13 +9,15 @@
 #  - Separa il CONTESTO, non i PERMESSI: tutte le sessioni girano come root.
 #
 # Comandi:
-#   lavori                                elenco dei lavori, con stato
+#   lavori                                MENU interattivo (nel terminale): scegli col numero, n = nuovo, ...
+#   lavori elenco                         solo l'elenco dei lavori, con stato (anche negli script)
 #   lavori <nome> [id-conversazione]      apre il lavoro (riattacca la sessione o la crea; con l'id riprende
 #                                         quella conversazione invece dell'ultima)
 #   lavori nuovo <nome> <cartella> ["descrizione"]   crea un lavoro (cartella e CLAUDE.md se mancano)
 #   lavori info <nome>                    dettagli: cartella, CLAUDE.md, memoria, conversazioni con gli id
 #   lavori descrivi <nome> "descrizione"  cambia la descrizione
 #   lavori togli <nome>                   toglie dall'indice (NON cancella cartella ne' conversazioni)
+#   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
 # Indice:    /etc/lavori/indice.tsv  (nome, sessione tmux, cartella, creato, ultimo uso, descrizione)
@@ -31,7 +33,7 @@ REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
 CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
 PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
-RISERVATI=" nuovo info descrivi togli aiuto elenco help "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria "
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
@@ -180,10 +182,108 @@ apri() {
     exec tmux attach -t "=$sess"
 }
 
+# ---------------------------------------------------------------------------------------------------------
+# Menu interattivo e promemoria
+# ---------------------------------------------------------------------------------------------------------
+NOMI=()
+spiegazione() {
+    cat <<'EOF2'
+  Cos'è: ogni LAVORO è una cartella con la sua sessione tmux e Claude Code dentro.
+   - Claude ricorda conversazioni e memoria PER CARTELLA: lavori diversi = contesti separati.
+   - tmux tiene viva la sessione: se cade l'SSH, rientri con "lavori" e Claude è ancora lì.
+   - Dentro: Ctrl-b poi d = esci lasciandolo acceso · Ctrl-b poi s = passa a un altro lavoro.
+  Attenzione: le sessioni restano aperte come root e la finestra conserva quello che hai scritto
+  (anche eventuali password): chiudi quelle che non usi. Avvertenze complete: lavori aiuto.
+EOF2
+}
+
+stampa_menu() {
+    NOMI=()
+    local i=0 nome sess cart creato uso descr stato
+    echo
+    echo "  ═══ Lavori di Claude Code ═══"
+    while IFS=$'\t' read -r nome sess cart creato uso descr; do
+        [ -z "$nome" ] && continue
+        i=$((i + 1)); NOMI+=("$nome")
+        if aperta "$sess"; then stato="● aperto"; else stato="○ chiuso"; fi
+        [ -d "$cart" ] || stato="✗ manca "
+        printf '  %2d) %s  %-12s %s\n' "$i" "$stato" "$nome" "$descr"
+        printf '      %s · ultimo uso: %s\n' "$cart" "$uso"
+    done < <(righe)
+    if [ "$i" -eq 0 ]; then
+        echo "  Nessun lavoro ancora."
+        echo
+        spiegazione
+    fi
+    echo
+    echo "  [numero] apri   n nuovo lavoro   i dettagli   ? come funziona   a guida completa   q esci"
+}
+
+chiedi_nuovo() {
+    local nome cart descr base r
+    echo
+    echo "  ── Nuovo lavoro ──"
+    while :; do
+        read -r -p "  Nome corto (minuscole, es. sito-casa; vuoto = annulla): " nome || return
+        [ -z "$nome" ] && return
+        if ! [[ "$nome" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]]; then echo "  Solo minuscole, numeri, - e _ (max 24)."; continue; fi
+        if [[ "$RISERVATI" == *" $nome "* ]]; then echo "  \"$nome\" è una parola riservata, scegline un'altra."; continue; fi
+        if esiste "$nome"; then echo "  Esiste già: $nome -> $(campo "$nome" 3)"; continue; fi
+        break
+    done
+    if [ -d /Progetti ]; then base=/Progetti; else base=$HOME/lavori; fi
+    read -r -p "  Cartella [$base/$nome]: " cart || return
+    cart=${cart:-$base/$nome}
+    read -r -p "  Descrizione in una riga (a cosa serve): " descr || return
+    echo
+    echo "  Creo: $nome -> $cart${descr:+ — $descr}"
+    read -r -p "  Confermi? [S/n] " r || return
+    [[ "$r" =~ ^[nN] ]] && { echo "  Annullato."; return; }
+    ( nuovo "$nome" "$cart" "$descr" ) || return
+    read -r -p "  Lo apro adesso? [S/n] " r || return
+    [[ "$r" =~ ^[nN] ]] || apri "$nome"
+}
+
+menu() {
+    local scelta n
+    while :; do
+        stampa_menu
+        read -r -p "  Scelta: " scelta || { echo; exit 0; }
+        case "$scelta" in
+            q|Q|"")   exit 0 ;;
+            n|N)      chiedi_nuovo ;;
+            "?")      echo; spiegazione; read -r -p "  (Invio per tornare al menu) " _ ;;
+            a|A)      echo; aiuto | ${PAGER:-less -R} ;;
+            i|I)      read -r -p "  Dettagli di quale numero? " n
+                      if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#NOMI[@]}" ]; then
+                          echo; ( info "${NOMI[$((n - 1))]}" ); read -r -p "  (Invio per tornare al menu) " _
+                      else echo "  Numero non valido."; fi ;;
+            *)        if [[ "$scelta" =~ ^[0-9]+$ ]] && [ "$scelta" -ge 1 ] && [ "$scelta" -le "${#NOMI[@]}" ]; then
+                          apri "${NOMI[$((scelta - 1))]}"
+                      elif esiste "$scelta"; then apri "$scelta"
+                      else echo "  Non ho capito \"$scelta\": scrivi un numero, n, i, ?, a o q."; fi ;;
+        esac
+    done
+}
+
+promemoria() {   # per il login SSH: due righe, solo se non sei gia' dentro tmux
+    [ -n "${TMUX:-}" ] && return 0
+    local aperti
+    aperti=$(righe | while IFS=$'\t' read -r nome sess _; do aperta "$sess" && printf '%s ' "$nome"; done)
+    echo "💡 Claude Code: scrivi \"lavori\" per il menu dei lavori (ogni lavoro gira in tmux e non si perde se cade l'SSH)."
+    if [ -n "$aperti" ]; then echo "   Già aperti: ${aperti% } → lavori <nome> per rientrare."
+    else echo "   Nessun lavoro aperto. Nuovo: lavori → n."; fi
+}
+
+aiuto() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+
 prepara
 case "${1:-}" in
-    ""|elenco)          elenco ;;
-    aiuto|-h|--help|help) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;
+    "")                 if [ -t 0 ] && [ -t 1 ]; then menu; else elenco; fi ;;
+    menu)               menu ;;
+    elenco)             elenco ;;
+    promemoria)         promemoria ;;
+    aiuto|-h|--help|help) aiuto ;;
     nuovo)              shift; nuovo "$@" ;;
     info)               [ -n "${2:-}" ] || errore "uso: lavori info <nome>"; info "$2" ;;
     descrivi)           shift; descrivi "$@" ;;
