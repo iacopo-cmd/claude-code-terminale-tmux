@@ -72,6 +72,7 @@ quello che è aperto.
 | `lavori descrivi <nome> "descrizione"` | cambia la descrizione |
 | `lavori togli <nome>` | toglie dall'indice (chiede conferma); **non cancella** cartella né conversazioni |
 | `lavori ore [<nome>]` | ore per sessione e totale di un lavoro, o la tabella dei totali di tutti |
+| `lavori guida [europea\|inglese\|egiziana]` | da che lato scrivi: `europea` = scrivi a sinistra (default); `inglese` o `egiziana` = scrivi a destra. Senza argomenti dice quale hai |
 | `lavori aiuto` | la guida |
 
 Il menu (`lavori` senza argomenti) e l'elenco sono a **riquadro/griglia**, con descrizione intera a capo e si
@@ -115,8 +116,12 @@ poi `Ctrl-b [` e le frecce (`q` per uscire, `Ctrl-b ←` per tornare a scrivere)
 chiude da solo.
 
 - `LAVORI_RISPOSTE=0` lo spegne; `LAVORI_RISPOSTE_MIN=<colonne>` cambia la soglia (default 120).
-- `LAVORI_RISPOSTE_LATO=sinistra` inverte i pannelli: scambi a sinistra e Claude Code a destra (per chi guida
-  dall'altra parte). Per averlo sempre: `export LAVORI_RISPOSTE_LATO=sinistra` nel tuo `~/.bashrc`.
+- **Da che lato scrivi** si sceglie con `lavori guida`:
+  - `lavori guida europea` — scrivi a sinistra, scambi a destra (default, il disegno qui sopra);
+  - `lavori guida inglese` oppure `lavori guida egiziana` — scrivi a destra, scambi a sinistra.
+
+  La scelta resta salvata in `/etc/lavori/guida` e vale dalla prossima apertura. Per una volta sola:
+  `LAVORI_RISPOSTE_LATO=sinistra lavori <nome>` (è il lato degli scambi).
 - A mano, in una sessione già aperta: `tmux split-window -h -d -l 60% lavori-risposte`
 - Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce.
 

@@ -18,6 +18,8 @@
 #   lavori descrivi <nome> "descrizione"  cambia la descrizione
 #   lavori togli <nome>                   toglie dall'indice (NON cancella cartella ne' conversazioni)
 #   lavori ore [<nome>]                   ore per sessione e totale (di un lavoro, o totali di tutti)
+#   lavori guida [europea|inglese|egiziana]   da che lato scrivi: europea = scrivi a sinistra (default);
+#                                         inglese o egiziana = scrivi a destra. Senza argomenti dice quale hai.
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
@@ -26,8 +28,9 @@
 #      mostra ora d'inizio e tempo trascorso dal vivo (anche aprendo con riparti-claude / riparti-fabio).
 # Scambi:    aprendo un lavoro su uno schermo largo (>= 120 colonne) la sessione si divide in due: a sinistra
 #            Claude Code dove scrivi e passa il codice, a destra gli scambi tu <-> Claude (lavori-risposte:
-#            restano fermi). LAVORI_RISPOSTE=0 lo spegne; LAVORI_RISPOSTE_MIN cambia la soglia di colonne;
-#            LAVORI_RISPOSTE_LATO=sinistra li inverte (scambi a sinistra, scrivi a destra).
+#            restano fermi). LAVORI_RISPOSTE=0 lo spegne; LAVORI_RISPOSTE_MIN cambia la soglia di colonne.
+#            Il lato si sceglie con "lavori guida" (resta salvato in /etc/lavori/guida); per una volta sola:
+#            LAVORI_RISPOSTE_LATO=sinistra|destra (lato degli scambi).
 # Indice:    /etc/lavori/indice.tsv  (nome, sessione tmux, cartella, creato, ultimo uso, descrizione)
 #            copia prima di ogni modifica in /etc/lavori/indice.tsv.prima; blocco con flock
 # Registro:  /var/log/lavori.log    (aperture, creazioni, rimozioni)
@@ -41,7 +44,7 @@ REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
 CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
 PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida "
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
@@ -203,6 +206,22 @@ togli() {
     echo "Tolto. Per rimetterlo: lavori nuovo $nome $cart"
 }
 
+guida_scelta() { local g; g=$(head -1 "$DIR/guida" 2>/dev/null); case "$g" in inglese|egiziana) echo "$g" ;; *) echo europea ;; esac; }
+guida_frase() { case "$1" in
+    europea) echo "Guida europea: scrivi a sinistra, gli scambi con Claude stanno a destra." ;;
+    *)       echo "Guida $1: scrivi a destra, gli scambi con Claude stanno a sinistra." ;; esac; }
+guida() {   # guida [europea|inglese|egiziana]: da che lato si scrive (lato del pannello degli scambi)
+    local g; g=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')
+    case "$g" in
+        "") guida_frase "$(guida_scelta)"; echo "Per cambiare: lavori guida europea | inglese | egiziana"; return ;;
+        europea|inglese|egiziana) ;;
+        *) errore "guida sconosciuta: $1 (europea, inglese o egiziana)" ;;
+    esac
+    printf '%s\n' "$g" > "$DIR/guida" || errore "non riesco a scrivere $DIR/guida"
+    registra "guida $g"
+    guida_frase "$g"; echo "Vale dalla prossima apertura di un lavoro (le sessioni gia' aperte restano come sono)."
+}
+
 apri() {
     local nome=$1 id=${2:-} v
     v=$(canon "$nome"); [ -n "$v" ] && nome=$v
@@ -226,7 +245,8 @@ apri() {
     # Claude Code a sinistra (dove scrivi), pannello degli scambi tu <-> Claude a destra; solo se lo schermo e' largo
     local col; col=$(tput cols 2>/dev/null || echo 80)
     if [ "${LAVORI_RISPOSTE:-1}" != 0 ] && [ "$col" -ge "${LAVORI_RISPOSTE_MIN:-120}" ] && command -v lavori-risposte >/dev/null; then
-        local lato=-h; [ "${LAVORI_RISPOSTE_LATO:-destra}" = sinistra ] && lato=-hb   # sinistra = versione "inglese"
+        local lato=-h g; g=$(guida_scelta)                    # europea: scambi a destra; inglese/egiziana: a sinistra
+        [ "${LAVORI_RISPOSTE_LATO:-$([ "$g" = europea ] && echo destra || echo sinistra)}" = sinistra ] && lato=-hb
         tmux split-window $lato -d -l 60% -t "=$sess:" "lavori-risposte '$nome'" 2>/dev/null || true
     fi
     if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
@@ -336,6 +356,7 @@ case "${1:-}" in
     info)               [ -n "${2:-}" ] || errore "uso: lavori info <nome>"; info "$2" ;;
     descrivi)           shift; descrivi "$@" ;;
     togli)              shift; togli "$@" ;;
+    guida)              guida "${2:-}" ;;
     ore)                if [ -n "${2:-}" ]; then v=$(canon "$2"); [ -n "$v" ] || errore "lavoro sconosciuto: $2"; else v=""; fi; exec lavori-ore mostra "$v" ;;
     -*)                 errore "opzione sconosciuta: $1 (lavori aiuto)" ;;
     *)                  apri "$@" ;;
