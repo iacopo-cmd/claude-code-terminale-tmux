@@ -73,6 +73,7 @@ quello che è aperto.
 | `lavori togli <nome>` | toglie dall'indice (chiede conferma); **non cancella** cartella né conversazioni |
 | `lavori ore [<nome>]` | ore per sessione e totale di un lavoro, o la tabella dei totali di tutti |
 | `lavori guida [europea\|inglese\|egiziana\|plancia]` | come stanno i pannelli: `europea` = scrivi a sinistra (default); `inglese` o `egiziana` = scrivi a destra; `plancia` = tre pannelli. Senza argomenti dice quale hai |
+| `lavori iacopo [on\|off]` | **iacopostyle**: accende o spegne firma e pannelli su tutte le sessioni, aperte e nuove (uguale: `lavori stile`, `lavori styl`, `lavori iacopostyle`). Senza `on`/`off` dice com'è adesso |
 | `lavori aiuto` | la guida |
 
 Il menu (`lavori` senza argomenti) e l'elenco sono a **riquadro/griglia**, con descrizione intera a capo e si
@@ -153,8 +154,21 @@ tmux split-window -h  -d -l 48% 'lavori-risposte --tu'
 - Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce
   (con `--tu` solo le tue battute e le domande di Claude, con `--claude` solo le sue risposte).
 
+### Iacopostyle: l'interruttore
+Firma nella barra e pannelli degli scambi insieme si chiamano **iacopostyle**, e si accendono o spengono con un
+comando solo, su **tutte le sessioni aperte** e su quelle che aprirai:
+
+```
+lavori iacopo off     # Claude Code da solo: via i pannelli e la firma
+lavori iacopo on      # rimette firma e pannelli (secondo "lavori guida")
+lavori iacopo         # dice com'è adesso
+```
+
+Al posto di `iacopo` vanno bene anche `stile`, `styl` e `iacopostyle`. Lo stato resta salvato in
+`/etc/lavori/stile` e si legge in fondo alla barra in basso: `… ● 2 aperte · iacopostyle on`.
+
 ### Barra di stato tmux (facoltativo)
-Per avere in basso ⏱ tempo, 🪙 token e ● sessioni aperte, aggiungi al tuo `~/.tmux.conf`:
+Per avere in basso ⏱ tempo, 🪙 token, ● sessioni aperte e lo stato dell'iacopostyle, aggiungi al tuo `~/.tmux.conf`:
 ```tmux
 set -g status on
 set -g status-interval 15

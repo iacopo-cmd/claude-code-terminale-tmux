@@ -22,6 +22,9 @@
 #                                         (default); inglese o egiziana = scrivi a destra; plancia = tre pannelli
 #                                         (sopra le risposte, sotto scrivi a sinistra e a destra le tue battute
 #                                         con le domande di Claude). Senza argomenti dice quale hai.
+#   lavori iacopo [on|off]                iacopostyle: accende o spegne firma e pannelli su TUTTE le sessioni,
+#                                         aperte e nuove (uguale: lavori stile, lavori styl, lavori iacopostyle).
+#                                         Senza on/off dice com'e' adesso. Lo stato si legge anche nella barra.
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
@@ -49,7 +52,7 @@ PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
 # Firma nella barra di tmux, accanto al nome della sessione (LAVORI_FIRMA="" la toglie)
 FIRMA=${LAVORI_FIRMA-✎ terminale personalizzato da Iacopo · 6 novembre 2026}
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl "
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
@@ -228,6 +231,66 @@ guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pan
     guida_frase "$g"; echo "Vale dalla prossima apertura di un lavoro (le sessioni gia' aperte restano come sono)."
 }
 
+# --- Iacopostyle: firma nella barra + pannelli degli scambi attorno a Claude Code. Interruttore: lavori iacopo on|off
+stile_stato() { [ "$(head -1 "$DIR/stile" 2>/dev/null)" = off ] && echo off || echo on; }
+_pannelli_scambi() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '/lavori-risposte/{print $1}'; }
+_pannello_claude() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '!/lavori-risposte/{print $1; exit}'; }
+vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette firma e pannelli (se non ci sono gia')
+    local sess=$1 nome=$2 col=$3 rig=$4 p lato=-h g
+    tmux set-option -t "=$sess:" status-right-length 120 2>/dev/null || true
+    if [ -n "$FIRMA" ]; then      # firma nella barra in basso, accanto al nome della sessione
+        tmux set-option -t "=$sess:" status-left "[#{session_name}] $FIRMA " 2>/dev/null || true
+        tmux set-option -t "=$sess:" status-left-length 100 2>/dev/null || true
+    fi
+    # pannelli degli scambi (vedi "lavori guida"); solo se lo schermo e' largo
+    [ "${LAVORI_RISPOSTE:-1}" != 0 ] && [ "$col" -ge "${LAVORI_RISPOSTE_MIN:-120}" ] && command -v lavori-risposte >/dev/null || return 0
+    [ -z "$(_pannelli_scambi "$sess")" ] || return 0
+    p=$(_pannello_claude "$sess"); [ -n "$p" ] || return 0
+    g=$(guida_scelta)
+    if [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
+        # plancia: sopra le risposte di Claude; sotto Claude Code a sinistra, a destra le tue battute + le sue domande
+        tmux split-window -vb -d -l 40% -t "$p" "lavori-risposte '$nome' --claude" 2>/dev/null || true
+        tmux split-window -h  -d -l 48% -t "$p" "lavori-risposte '$nome' --tu" 2>/dev/null || true
+    else
+        # di fianco. europea: scambi a destra; inglese/egiziana: a sinistra (plancia su schermo basso: come europea)
+        case "$g" in inglese|egiziana) g=sinistra ;; *) g=destra ;; esac
+        [ "${LAVORI_RISPOSTE_LATO:-$g}" = sinistra ] && lato=-hb
+        tmux split-window $lato -d -l 60% -t "$p" "lavori-risposte '$nome'" 2>/dev/null || true
+    fi
+}
+spoglia() {   # spoglia <sessione>: toglie firma e pannelli degli scambi, resta Claude Code da solo
+    local sess=$1 p
+    tmux set-option -u -t "=$sess:" status-left 2>/dev/null || true
+    tmux set-option -u -t "=$sess:" status-left-length 2>/dev/null || true
+    [ -n "$(_pannello_claude "$sess")" ] || return 0     # mai chiudere l'ultimo pannello
+    for p in $(_pannelli_scambi "$sess"); do tmux kill-pane -t "$p" 2>/dev/null || true; done
+}
+stile() {   # stile [on|off]: accende/spegne l'iacopostyle su tutte le sessioni aperte e su quelle nuove
+    local v nome sess resto dim col rig n=0
+    v=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')
+    case "$v" in
+        "") echo "Iacopostyle: $(stile_stato)."; echo "Per cambiare: lavori iacopo on | off   (vanno bene anche: lavori stile, lavori styl, lavori iacopostyle)"; return ;;
+        on|off) ;;
+        *) errore "uso: lavori iacopo on | off" ;;
+    esac
+    printf '%s\n' "$v" > "$DIR/stile" || errore "non riesco a scrivere $DIR/stile"
+    registra "iacopostyle $v"
+    while IFS=$'\t' read -r nome sess resto; do
+        aperta "$sess" || continue
+        if [ "$v" = on ]; then
+            dim=$(tmux display-message -p -t "=$sess:" '#{window_width} #{window_height}' 2>/dev/null); col=${dim% *}; rig=${dim#* }
+            [[ "$col" =~ ^[0-9]+$ && "$rig" =~ ^[0-9]+$ ]] || continue
+            vesti "$sess" "$nome" "$col" $((rig+1))
+        else
+            spoglia "$sess"
+        fi
+        n=$((n+1))
+    done < <(righe)
+    tmux refresh-client -S 2>/dev/null || true
+    if [ "$v" = on ]; then echo "Iacopostyle on: firma e pannelli degli scambi su $n sessioni aperte e su quelle che aprirai."
+    else echo "Iacopostyle off: Claude Code da solo, senza firma e senza pannelli, su $n sessioni aperte e su quelle che aprirai."; fi
+}
+
 apri() {
     local nome=$1 id=${2:-} v
     v=$(canon "$nome"); [ -n "$v" ] && nome=$v
@@ -251,25 +314,8 @@ apri() {
     [[ "$col" =~ ^[0-9]+$ ]] || col=80; [[ "$rig" =~ ^[0-9]+$ ]] || rig=24
     # la sessione nasce gia' grande come il terminale, cosi' i pannelli qui sotto hanno le misure giuste
     tmux new-session -d -s "$sess" -x "$col" -y "$rig" -c "$cart" "lavori-ore inizio '$nome'; cd '$cart' && $cmd; $fine; lavori-ore fine '$nome'" || errore "tmux non e' riuscito a creare la sessione"
-    # firma nella barra in basso, accanto al nome della sessione
-    if [ -n "$FIRMA" ]; then
-        tmux set-option -t "=$sess:" status-left "[#{session_name}] $FIRMA " 2>/dev/null || true
-        tmux set-option -t "=$sess:" status-left-length 100 2>/dev/null || true
-    fi
-    # pannelli degli scambi attorno a Claude Code (vedi "lavori guida"); solo se lo schermo e' largo
-    if [ "${LAVORI_RISPOSTE:-1}" != 0 ] && [ "$col" -ge "${LAVORI_RISPOSTE_MIN:-120}" ] && command -v lavori-risposte >/dev/null; then
-        local lato=-h g; g=$(guida_scelta)
-        if [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
-            # plancia: sopra le risposte di Claude; sotto Claude Code a sinistra, a destra le tue battute + le sue domande
-            tmux split-window -vb -d -l 40% -t "=$sess:" "lavori-risposte '$nome' --claude" 2>/dev/null || true
-            tmux split-window -h  -d -l 48% -t "=$sess:" "lavori-risposte '$nome' --tu" 2>/dev/null || true
-        else
-            # di fianco. europea: scambi a destra; inglese/egiziana: a sinistra (plancia su schermo basso: come europea)
-            case "$g" in inglese|egiziana) g=sinistra ;; *) g=destra ;; esac
-            [ "${LAVORI_RISPOSTE_LATO:-$g}" = sinistra ] && lato=-hb
-            tmux split-window $lato -d -l 60% -t "=$sess:" "lavori-risposte '$nome'" 2>/dev/null || true
-        fi
-    fi
+    # iacopostyle (firma nella barra + pannelli degli scambi): solo se l'interruttore e' acceso
+    [ "$(stile_stato)" = on ] && vesti "$sess" "$nome" "$col" "$rig"
     if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
     exec tmux attach -t "=$sess"
 }
@@ -367,6 +413,7 @@ promemoria() {   # per il login SSH: due righe, solo se non sei gia' dentro tmux
 aiuto() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 prepara
+case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in iacopo|iacopostyle|stile|styl) stile "${2:-}"; exit ;; esac
 case "${1:-}" in
     "")                 if [ -t 0 ] && [ -t 1 ]; then menu; else elenco; fi ;;
     menu)               menu ;;
