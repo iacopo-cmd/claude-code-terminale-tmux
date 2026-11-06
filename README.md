@@ -93,6 +93,7 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 | comando | `/usr/local/bin/lavori` |
 | conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
 | barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte; ⚠ se lo schermo è piccolo per i pannelli) |
+| comando corto | `/usr/local/bin/iacopo` (`iacopo on` / `iacopo off`: scorciatoia di `lavori iacopo …`) |
 | pannello scambi | `/usr/local/bin/lavori-risposte` (gli scambi tu ↔ Claude in un pannello a parte; serve `python3`) |
 | indice | `/etc/lavori/indice.tsv` (nome, sessione tmux, cartella, creato, ultimo uso, descrizione); a ogni modifica copia in `indice.tsv.prima`, scrittura su file temporaneo, blocco con `flock` |
 | registro | `/var/log/lavori.log` (aperture, creazioni, rimozioni) |
@@ -164,7 +165,8 @@ lavori iacopo on      # rimette firma e pannelli (secondo "lavori guida")
 lavori iacopo         # dice com'è adesso
 ```
 
-Al posto di `iacopo` vanno bene anche `stile`, `styl` e `iacopostyle`. Lo stato resta salvato in
+C'è anche il comando corto, senza `lavori` davanti: `iacopo on`, `iacopo off`, `iacopo`.
+Al posto di `lavori iacopo` vanno bene anche `lavori stile`, `lavori styl` e `lavori iacopostyle`. Lo stato resta salvato in
 `/etc/lavori/stile` e si legge in fondo alla barra in basso: `… ● 2 aperte · iacopostyle on`.
 
 ### Barra di stato tmux (facoltativo)

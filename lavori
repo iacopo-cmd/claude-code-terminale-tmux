@@ -23,7 +23,8 @@
 #                                         (sopra le risposte, sotto scrivi a sinistra e a destra le tue battute
 #                                         con le domande di Claude). Senza argomenti dice quale hai.
 #   lavori iacopo [on|off]                iacopostyle: accende o spegne firma e pannelli su TUTTE le sessioni,
-#                                         aperte e nuove (uguale: lavori stile, lavori styl, lavori iacopostyle).
+#                                         aperte e nuove (uguale: lavori stile, lavori styl, lavori iacopostyle;
+#                                         comando corto: iacopo on | iacopo off).
 #                                         Senza on/off dice com'e' adesso. Lo stato si legge anche nella barra.
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
@@ -269,9 +270,9 @@ stile() {   # stile [on|off]: accende/spegne l'iacopostyle su tutte le sessioni 
     local v nome sess resto dim col rig n=0
     v=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')
     case "$v" in
-        "") echo "Iacopostyle: $(stile_stato)."; echo "Per cambiare: lavori iacopo on | off   (vanno bene anche: lavori stile, lavori styl, lavori iacopostyle)"; return ;;
+        "") echo "Iacopostyle: $(stile_stato)."; echo "Per cambiare: iacopo on | iacopo off   (vanno bene anche: lavori iacopo, lavori stile, lavori styl)"; return ;;
         on|off) ;;
-        *) errore "uso: lavori iacopo on | off" ;;
+        *) errore "uso: iacopo on | iacopo off" ;;
     esac
     printf '%s\n' "$v" > "$DIR/stile" || errore "non riesco a scrivere $DIR/stile"
     registra "iacopostyle $v"

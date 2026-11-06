@@ -1,0 +1,7 @@
+#!/bin/bash
+# iacopo - comando corto per l'interruttore dell'iacopostyle (firma + pannelli degli scambi):
+#   iacopo on    accende su tutte le sessioni, aperte e nuove
+#   iacopo off   spegne: Claude Code da solo
+#   iacopo       dice com'e' adesso
+# E' solo una scorciatoia di "lavori iacopo ...".
+exec lavori iacopo "$@"
