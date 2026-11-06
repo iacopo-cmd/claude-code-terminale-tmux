@@ -1,0 +1,67 @@
+#!/bin/bash
+# lavori-ore - conta ore delle sessioni dei "lavori" (parte di claude-code-terminale-tmux).
+# https://github.com/iacopo-cmd/claude-code-terminale-tmux
+#
+# Lo chiama "lavori": "inizio"/"fine" ad ogni apertura/chiusura di una sessione tmux,
+# "mostra"/"sessioni"/"totale" per i resoconti. Si puo' usare anche a mano.
+#
+#   lavori-ore inizio <nome>     segna l'inizio di una sessione (file <nome>.aperta)
+#   lavori-ore fine <nome>       chiude la sessione: calcola la durata e la aggiunge a <nome>.tsv
+#   lavori-ore sessioni <nome>   ultime sessioni (inizio -> fine, durata) + eventuale "in corso" + totale
+#   lavori-ore totale <nome>     solo i secondi totali delle sessioni chiuse
+#   lavori-ore mostra [<nome>]   resoconto di un lavoro, oppure la tabella dei totali di tutti
+#
+# Dati: ${LAVORI_DIR:-/etc/lavori}/ore/<nome>.tsv  (inizio TAB fine TAB secondi)  e  <nome>.aperta (sessione in corso).
+set -uo pipefail
+
+DIR=${LAVORI_DIR:-/etc/lavori}
+OREDIR=$DIR/ore
+INDICE=$DIR/indice.tsv
+REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
+
+registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
+fmt() { local s=${1:-0}; [ "$s" -lt 0 ] && s=0; printf '%dh %02dm' $((s/3600)) $(((s%3600)/60)); }
+
+totale() {   # secondi totali delle sessioni chiuse di <nome>
+    local n=$1
+    local f="$OREDIR/$n.tsv"
+    if [ -f "$f" ]; then awk -F'\t' '{s+=$3} END{printf "%d", s+0}' "$f"; else echo 0; fi
+}
+
+sessioni() {   # elenco leggibile delle sessioni + totale, per <nome>
+    local n=$1
+    local f="$OREDIR/$n.tsv" ap="$OREDIR/$n.aperta"
+    if [ -f "$f" ]; then
+        tail -8 "$f" | while IFS=$'\t' read -r i fi s; do printf '  %s  ->  %s   %s\n' "$i" "$fi" "$(fmt "$s")"; done
+    else echo "  (nessuna sessione chiusa registrata)"; fi
+    [ -f "$ap" ] && echo "  in corso da $(date -d @"$(cat "$ap")" '+%Y-%m-%d %H:%M')"
+    echo "  TOTALE (sessioni chiuse): $(fmt "$(totale "$n")")"
+}
+
+mostra() {
+    local n=${1:-}
+    if [ -n "$n" ]; then echo "Ore di $n:"; sessioni "$n"; return; fi
+    printf '%-12s %s\n' "LAVORO" "ORE (chiuse)"
+    grep -v '^#' "$INDICE" 2>/dev/null | grep -v '^[[:space:]]*$' | while IFS=$'\t' read -r nome _; do
+        [ -n "$nome" ] && printf '%-12s %s\n' "$nome" "$(fmt "$(totale "$nome")")"
+    done
+}
+
+n=${2:-}
+case "${1:-}" in
+    inizio)
+        [ -n "$n" ] || exit 0
+        mkdir -p "$OREDIR"; date +%s > "$OREDIR/$n.aperta"
+        registra "sessione inizio $n" ;;
+    fine)
+        ap="$OREDIR/$n.aperta"
+        [ -n "$n" ] && [ -f "$ap" ] || exit 0
+        ini=$(cat "$ap" 2>/dev/null); rm -f "$ap"; [ -n "$ini" ] || exit 0
+        fin=$(date +%s); dur=$((fin - ini)); [ "$dur" -lt 0 ] && dur=0
+        printf '%s\t%s\t%s\n' "$(date -d @"$ini" '+%Y-%m-%d %H:%M')" "$(date -d @"$fin" '+%Y-%m-%d %H:%M')" "$dur" >> "$OREDIR/$n.tsv"
+        registra "sessione fine $n (${dur}s)" ;;
+    totale)    totale "$n" ;;
+    sessioni)  [ -n "$n" ] && sessioni "$n" || echo "uso: lavori-ore sessioni <nome>" >&2 ;;
+    mostra|"") mostra "$n" ;;
+    *) echo "uso: lavori-ore inizio|fine|sessioni|totale|mostra [nome]" >&2; exit 1 ;;
+esac

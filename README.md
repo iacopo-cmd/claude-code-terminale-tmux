@@ -6,13 +6,21 @@ Script di shell per **Claude Code nel terminale**: un progetto per sessione **tm
 se cade l'SSH**, e un **indice dei lavori** per crearli e riaprirli con un comando.
 
 ```
-$ lavori
-LAVORO     STATO    CARTELLA                     ULTIMO USO        DESCRIZIONE
-server     ● aperto /root                        2026-11-03 09:12  Server: manutenzione
-sito       chiuso   /srv/sito                    2026-11-02 18:40  Sito della ditta
+$ lavori                       # menu a riquadri, si adatta alla larghezza del terminale
+╭──────────────────────────────────────────────────────────────╮
+│                     Lavori di Claude Code   (2)                │
+├──────────────────────────────────────────────────────────────┤
+│  1  ● server                          ultimo uso 2026-11-03 09:12 │
+│       Server: manutenzione                                     │
+├──────────────────────────────────────────────────────────────┤
+│  2  ○ sito                            ultimo uso 2026-11-02 18:40 │
+│       Sito della ditta                                         │
+╰──────────────────────────────────────────────────────────────╯
 
 $ lavori sito          # ti riattacca, o riapre la sessione con l'ultima conversazione di Claude
 ```
+
+In basso, la **barra di tmux** mostra sempre cosa sta monitorando: `⏱ tempo della sessione · 🪙 token · ● sessioni aperte`.
 
 ---
 
@@ -63,7 +71,11 @@ quello che è aperto.
 | `lavori info <nome>` | dettagli: cartella, `CLAUDE.md`, memoria, ultime conversazioni con id, data e dimensione |
 | `lavori descrivi <nome> "descrizione"` | cambia la descrizione |
 | `lavori togli <nome>` | toglie dall'indice (chiede conferma); **non cancella** cartella né conversazioni |
+| `lavori ore [<nome>]` | ore per sessione e totale di un lavoro, o la tabella dei totali di tutti |
 | `lavori aiuto` | la guida |
+
+Il menu (`lavori` senza argomenti) e l'elenco sono a **riquadro/griglia**, con descrizione intera a capo e si
+adattano alla larghezza del terminale. Nomi e cartelle **senza spazi**.
 
 Dentro tmux: **Ctrl-b d** ti stacchi senza chiudere niente, **Ctrl-b s** passi a un altro lavoro.
 Se lanci `lavori <altro>` mentre sei già in tmux, passa all'altra sessione invece di annidarla.
@@ -77,9 +89,20 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 | Cosa | Dove |
 |---|---|
 | comando | `/usr/local/bin/lavori` |
+| conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
+| barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte) |
 | indice | `/etc/lavori/indice.tsv` (nome, sessione tmux, cartella, creato, ultimo uso, descrizione); a ogni modifica copia in `indice.tsv.prima`, scrittura su file temporaneo, blocco con `flock` |
 | registro | `/var/log/lavori.log` (aperture, creazioni, rimozioni) |
-| riga di stato | `~/.claude/avviso-tmux.sh` (facoltativo, vedi sotto) |
+| riga di stato (Claude) | `~/.claude/avviso-tmux.sh` (facoltativo, vedi sotto) |
+
+### Barra di stato tmux (facoltativo)
+Per avere in basso ⏱ tempo, 🪙 token e ● sessioni aperte, aggiungi al tuo `~/.tmux.conf`:
+```tmux
+set -g status on
+set -g status-interval 15
+set -g status-right-length 90
+set -g status-right ' #S  #(/usr/local/bin/lavori-barra #S)'
+```
 
 Si possono cambiare con le variabili `LAVORI_DIR`, `LAVORI_REGISTRO`, `CLAUDE_BIN`, `PROGETTI_CLAUDE`.
 
@@ -102,6 +125,18 @@ lavori server
 avviso rosso, e qualche promemoria in chat. `installa.sh` lo copia in `~/.claude/`; per attivarlo **aggiungi a mano**
 il contenuto di `impostazioni-esempio.json` al tuo `~/.claude/settings.json`, senza sovrascrivere le impostazioni
 che hai già.
+
+## In arrivo (idee, non ancora fatte)
+
+Proprio perché è uno strumento potente (sessioni aperte come root), queste aggiunte servono soprattutto a **non
+dimenticarsele aperte**:
+
+- **🪙 conta-token per lavoro**: comando che somma i token dai transcript di ogni progetto (oltre al totale già in barra).
+- **Guardia** (cron): controlla le sessioni aperte; se ne resti **staccato** la segnala su un **bot** (es. Telegram) e
+  ricorda di chiudere (prime 4 ore ogni ora, poi ogni 4 ore). Quando non c'è niente di aperto, sta zitta.
+- **Segnala + conferma**: aprendo un lavoro mentre un altro è ancora aperto, avvisa e chiede conferma.
+- **"chiudi tutto" dal bot**: un comando per **chiudere tutte le sessioni da remoto** (dal telefono, via bot) se le
+  hai lasciate aperte — la rete di sicurezza di uno strumento che altrimenti ti lascia tutto acceso.
 
 ## Licenza
 

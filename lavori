@@ -17,9 +17,13 @@
 #   lavori info <nome>                    dettagli: cartella, CLAUDE.md, memoria, conversazioni con gli id
 #   lavori descrivi <nome> "descrizione"  cambia la descrizione
 #   lavori togli <nome>                   toglie dall'indice (NON cancella cartella ne' conversazioni)
+#   lavori ore [<nome>]                   ore per sessione e totale (di un lavoro, o totali di tutti)
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
+# Nomi e cartelle: niente spazi (nome: minuscole, numeri, - e _; cartella: nessuno spazio nel percorso).
+# Ore: ogni sessione aperta segna inizio e fine; il totale e' la somma delle sessioni chiuse; la riga di stato
+#      mostra ora d'inizio e tempo trascorso dal vivo (anche aprendo con riparti-claude / riparti-fabio).
 # Indice:    /etc/lavori/indice.tsv  (nome, sessione tmux, cartella, creato, ultimo uso, descrizione)
 #            copia prima di ogni modifica in /etc/lavori/indice.tsv.prima; blocco con flock
 # Registro:  /var/log/lavori.log    (aperture, creazioni, rimozioni)
@@ -33,11 +37,43 @@ REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
 CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
 PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore "
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
 ora() { date '+%Y-%m-%d %H:%M'; }
+
+# --- Cornice dell'elenco/menu: bash puro (conta i caratteri in UTF-8), si adatta alla larghezza del terminale ---
+_line() { local n=$1 c=${2:-─} o=""; while [ "$n" -gt 0 ]; do o+="$c"; n=$((n-1)); done; printf '%s' "$o"; }
+_pad()  { local s=$1 w=$2; [ "${#s}" -gt "$w" ] && s=${s:0:$w}; printf '%s%*s' "$s" "$(( w - ${#s} ))" ""; }
+_cen()  { local s=$1 w=$2; local len=${#s} l; [ "$len" -ge "$w" ] && { printf '%s' "${s:0:$w}"; return; }
+          l=$(( (w-len)/2 )); printf '%*s%s%*s' "$l" "" "$s" "$(( w-len-l ))" ""; }
+_wrap() { local t=$1 w=$2 l="" x; for x in $t; do
+            if [ -z "$l" ]; then l=$x
+            elif [ $(( ${#l}+1+${#x} )) -le "$w" ]; then l="$l $x"
+            else printf '%s\n' "$l"; l=$x; fi
+            while [ "${#l}" -gt "$w" ]; do printf '%s\n' "${l:0:$w}"; l="${l:$w}"; done
+          done; [ -n "$l" ] && printf '%s\n' "$l"; }
+_render() {   # $1 = menu|elenco ; in "menu" numera le righe e popola NOMI[] (per la scelta col numero)
+    local mode=$1 W CW i=0 nome sess cart creato uso descr dot left right gap rl tot
+    W=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}; [ "$W" -gt 100 ] && W=100; [ "$W" -lt 54 ] && W=54
+    CW=$((W-2)); [ "$mode" = menu ] && NOMI=()
+    tot=$(righe | grep -c . 2>/dev/null || echo 0)
+    printf '\033[36m╭%s╮\033[0m\n' "$(_line "$CW")"
+    printf '\033[36m│\033[0m\033[1m%s\033[0m\033[36m│\033[0m\n' "$(_cen "Lavori di Claude Code   ($tot)" "$CW")"
+    while IFS=$'\t' read -r nome sess cart creato uso descr; do
+        [ -z "$nome" ] && continue
+        printf '\033[36m├%s┤\033[0m\n' "$(_line "$CW")"
+        i=$((i+1)); [ "$mode" = menu ] && NOMI+=("$nome")
+        if aperta "$sess"; then dot="●"; elif [ ! -d "$cart" ]; then dot="✗"; else dot="○"; fi
+        if [ "$mode" = menu ]; then left="  $(_pad "$i" 2) $dot $nome"; else left="  $dot $nome"; fi
+        right="ultimo uso ${uso:--} "
+        gap=$(( CW - ${#left} - ${#right} )); [ "$gap" -lt 1 ] && gap=1
+        printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "$left$(_line "$gap" ' ')$right" "$CW")"
+        while IFS= read -r rl; do printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "       $rl" "$CW")"; done < <(_wrap "${descr:--}" $((CW-9)))
+    done < <(righe)
+    printf '\033[36m╰%s╯\033[0m\n' "$(_line "$CW")"
+}
 
 prepara() {
     [ "$(id -u)" -eq 0 ] || errore "va lanciato come root"
@@ -72,14 +108,9 @@ cartella_claude() { printf '%s/%s' "$PROGETTI_CLAUDE" "$(printf '%s' "$1" | sed 
 aperta() { tmux has-session -t "=$1" 2>/dev/null; }
 
 elenco() {
-    printf '%-10s %-8s %-28s %-17s %s\n' "LAVORO" "STATO" "CARTELLA" "ULTIMO USO" "DESCRIZIONE"
-    righe | while IFS=$'\t' read -r nome sess cart creato uso descr; do
-        if aperta "$sess"; then stato="● aperto"; else stato="  chiuso"; fi
-        [ -d "$cart" ] || stato="✗ manca"
-        printf '%-10s %-8s %-28s %-17s %s\n' "$nome" "$stato" "$cart" "$uso" "$descr"
-    done
-    echo
-    echo "Apri: lavori <nome>    Nuovo: lavori nuovo <nome> <cartella> \"descrizione\"    Dettagli: lavori info <nome>"
+    _render elenco
+    echo "  Apri: lavori <nome>  ·  Nuovo: lavori nuovo <nome> <cartella> \"descrizione\"  ·  Dettagli: lavori info <nome>"
+    echo "  ● aperto   ○ chiuso   ✗ manca"
 }
 
 info() {
@@ -100,6 +131,8 @@ info() {
     else
         echo "  nessuna"
     fi
+    echo "Ore (ultime sessioni; totale in fondo):"
+    lavori-ore sessioni "$nome"
 }
 
 nuovo() {
@@ -109,7 +142,9 @@ nuovo() {
     [[ "$RISERVATI" == *" $nome "* ]] && errore "nome riservato: $nome"
     esiste "$nome" && errore "esiste gia': $nome -> $(campo "$nome" 3)"
     [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
+    case "$cart" in *[[:space:]]*) errore "la cartella non puo' contenere spazi: $cart" ;; esac
     cart=$(realpath -m -- "$cart")
+    case "$cart" in *[[:space:]]*) errore "la cartella non puo' contenere spazi: $cart" ;; esac
     case "$cart" in /|/etc|/usr|/bin|/sbin|/var|/proc|/sys|/dev|/boot) errore "cartella non adatta: $cart" ;; esac
     righe | awk -F'\t' -v c="$cart" '$3 == c { found=1 } END { exit !found }' && \
         errore "cartella gia' usata da un altro lavoro: $cart (stessa cartella = stesso contesto di Claude)"
@@ -177,7 +212,7 @@ apri() {
     else cmd="'$CLAUDE_BIN' --continue || '$CLAUDE_BIN'"; fi   # ultima conversazione della cartella, o una nuova
     local fine="echo; echo 'Claude chiuso. Invio per chiudere la sessione $sess (lavori $nome per riaprirla).'; read"
     registra "apri $nome (nuova sessione${id:+, conversazione $id})"
-    tmux new-session -d -s "$sess" -c "$cart" "cd '$cart' && $cmd; $fine" || errore "tmux non e' riuscito a creare la sessione"
+    tmux new-session -d -s "$sess" -c "$cart" "lavori-ore inizio '$nome'; cd '$cart' && $cmd; $fine; lavori-ore fine '$nome'" || errore "tmux non e' riuscito a creare la sessione"
     if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
     exec tmux attach -t "=$sess"
 }
@@ -198,25 +233,12 @@ EOF2
 }
 
 stampa_menu() {
-    NOMI=()
-    local i=0 nome sess cart creato uso descr stato
-    echo
-    echo "  ═══ Lavori di Claude Code ═══"
-    while IFS=$'\t' read -r nome sess cart creato uso descr; do
-        [ -z "$nome" ] && continue
-        i=$((i + 1)); NOMI+=("$nome")
-        if aperta "$sess"; then stato="● aperto"; else stato="○ chiuso"; fi
-        [ -d "$cart" ] || stato="✗ manca "
-        printf '  %2d) %s  %-12s %s\n' "$i" "$stato" "$nome" "$descr"
-        printf '      %s · ultimo uso: %s\n' "$cart" "$uso"
-    done < <(righe)
-    if [ "$i" -eq 0 ]; then
-        echo "  Nessun lavoro ancora."
-        echo
-        spiegazione
+    if [ -z "$(righe)" ]; then
+        NOMI=(); echo; echo "  Nessun lavoro ancora."; echo; spiegazione
+        echo; echo "  n = nuovo lavoro   ·   q = esci"; return
     fi
-    echo
-    echo "  [numero] apri   n nuovo lavoro   i dettagli   ? come funziona   a guida completa   q esci"
+    _render menu
+    echo "  [numero] apri · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
 }
 
 chiedi_nuovo() {
@@ -288,6 +310,7 @@ case "${1:-}" in
     info)               [ -n "${2:-}" ] || errore "uso: lavori info <nome>"; info "$2" ;;
     descrivi)           shift; descrivi "$@" ;;
     togli)              shift; togli "$@" ;;
+    ore)                if [ -n "${2:-}" ]; then esiste "$2" || errore "lavoro sconosciuto: $2"; fi; exec lavori-ore mostra "${2:-}" ;;
     -*)                 errore "opzione sconosciuta: $1 (lavori aiuto)" ;;
     *)                  apri "$@" ;;
 esac

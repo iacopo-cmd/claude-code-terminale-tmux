@@ -10,8 +10,13 @@ if [ -e /usr/local/bin/lavori ] && ! cmp -s "$QUI/lavori" /usr/local/bin/lavori;
     echo "Copia della versione precedente: /usr/local/bin/lavori.prima-*"
 fi
 install -m 755 "$QUI/lavori" /usr/local/bin/lavori
+if [ -e /usr/local/bin/lavori-ore ] && ! cmp -s "$QUI/lavori-ore" /usr/local/bin/lavori-ore; then
+    cp -p /usr/local/bin/lavori-ore "/usr/local/bin/lavori-ore.prima-$(date +%Y%m%d%H%M%S)"
+fi
+install -m 755 "$QUI/lavori-ore" /usr/local/bin/lavori-ore
+install -m 755 "$QUI/lavori-barra" /usr/local/bin/lavori-barra
 mkdir -p /etc/lavori && chmod 700 /etc/lavori
-echo "Installato /usr/local/bin/lavori (indice in /etc/lavori/indice.tsv)."
+echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra (indice in /etc/lavori/indice.tsv)."
 
 mkdir -p "$HOME/.claude"
 if [ -e "$HOME/.claude/avviso-tmux.sh" ] && ! cmp -s "$QUI/avviso-tmux.sh" "$HOME/.claude/avviso-tmux.sh"; then
