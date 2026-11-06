@@ -3,7 +3,7 @@
 # (con Claude dentro) ma senza nessun terminale collegato: tipico quando cade l'SSH e non ci si ricollega.
 #
 # Uso:  lavori-guardia          elenco delle sessioni staccate, a mano (guarda e basta)
-#       lavori-guardia giro     il giro di controllo, per cron ogni 15 minuti: tiene il conto e manda gli avvisi
+#       lavori-guardia giro     il giro di controllo, per cron ogni 5 minuti: tiene il conto e manda gli avvisi
 #
 # Il giro: la prima volta che vede una sessione staccata se la segna e aspetta (puo' essere uno stacco di
 # un attimo). Se al giro dopo e' ancora staccata manda il primo avviso; poi ricorda ogni ora per le prime
@@ -13,13 +13,13 @@
 # Avvisi: usa il comando "avvisa" se c'e' (avvisa -f lavori-guardia -l allarme ...), oppure il comando che
 # metti in LAVORI_AVVISA (riceve il testo come ultimo argomento); se non c'e' nessuno dei due, stampa.
 # Stato:  /etc/lavori/guardia/<nome>  (da quando e' staccata, ora dell'ultimo avviso, quanti avvisi)
-# Cron:   */15 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1
+# Cron:   3-59/5 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1   (un giro pesa ~0,06 secondi)
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 DIR=${LAVORI_DIR:-/etc/lavori}
 IDX=$DIR/indice.tsv
 STATO=$DIR/guardia
 REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
-ATTESA=600            # secondi da staccata prima del primo avviso (= almeno un giro di cron)
+ATTESA=240            # secondi da staccata prima del primo avviso (= almeno un giro di cron da 5 minuti)
 ORA=3600; QUATTRO=14400
 
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }

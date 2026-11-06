@@ -182,14 +182,18 @@ lavori-guardia          # a mano: elenco delle sessioni staccate (guarda e basta
 lavori-guardia giro     # il giro di controllo, da far girare con cron
 ```
 
-Per farla girare da sola ogni 15 minuti, crea `/etc/cron.d/lavori-guardia`:
+Per farla girare da sola ogni 5 minuti, crea `/etc/cron.d/lavori-guardia`:
 
 ```
-*/15 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1
+3-59/5 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1
 ```
+
+Un giro pesa pochissimo (circa 0,06 secondi: chiede a tmux chi è collegato e basta), quindi ogni 5 minuti non si
+sente. Il `3-59/5` lo fa partire ai minuti 3, 8, 13…, lontano dallo scoccare dell'ora e dei dieci minuti, quando
+di solito partono gli altri script.
 
 Come si comporta il giro: la prima volta che vede una sessione staccata se la segna e aspetta (può essere uno
-stacco di un attimo); se al giro dopo è ancora staccata manda il **primo avviso**, poi ricorda **ogni ora per le
+stacco di un attimo); se al giro dopo è ancora staccata manda il **primo avviso** (quindi entro 5-10 minuti dallo stacco), poi ricorda **ogni ora per le
 prime 4 ore** e **ogni 4 ore** dopo. Quando ti ricolleghi o la chiudi dimentica tutto; se non c'è niente di
 staccato sta zitta. Non chiude mai niente da sola.
 
