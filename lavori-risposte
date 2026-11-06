@@ -3,13 +3,16 @@
 # senza tool e senza codice, seguendo dal vivo il transcript (.jsonl) del lavoro. Pensato per stare in
 # un pannello tmux sopra a Claude Code: sotto scorre il codice, qui il discorso resta fermo.
 #
-# Uso:  lavori-risposte [nome-lavoro | cartella] [--stampa]
+# Uso:  lavori-risposte [nome-lavoro | cartella] [--tu | --claude] [--stampa]
+#   --tu: solo le tue battute        --claude: solo le risposte di Claude   (per tenerle in due pannelli)
+#   con --tu compaiono anche le DOMANDE che Claude ti fa (frasi che finiscono con "?" e le domande a scelta),
+#   in fila tra le tue battute: cosi' vedi cosa aspetta risposta e cosa hai risposto.
 #   senza argomenti: dentro tmux usa il nome della sessione, altrimenti la cartella corrente
 #   --stampa: stampa quello che c'e' ed esce (senza restare in ascolto)
 # Prova a mano, dentro la sessione di un lavoro:
 #   tmux split-window -h -d -l 60% lavori-risposte
 # "lavori <nome>" lo apre da solo a destra se lo schermo e' largo; quando Claude si chiude e questo
-# pannello resta l'unico della finestra, esce (cosi' la sessione tmux non resta appesa).
+# pannello resta solo (o solo con altri lavori-risposte), esce (cosi' la sessione tmux non resta appesa).
 import datetime, glob, json, os, re, shutil, subprocess, sys, textwrap, time
 
 IDX = os.path.join(os.environ.get('LAVORI_DIR', '/etc/lavori'), 'indice.tsv')
@@ -84,6 +87,35 @@ def testo_di(o):
     return ('tu' if tipo == 'user' else 'claude'), cont
 
 
+def domande_di(o):
+    """riga del transcript -> le domande che Claude fa in quel messaggio (lista, anche vuota)"""
+    if o.get('type') != 'assistant' or o.get('isSidechain') or o.get('isApiErrorMessage'):
+        return []
+    cont = (o.get('message') or {}).get('content')
+    if isinstance(cont, str):
+        cont = [{'type': 'text', 'text': cont}]
+    out = []
+    for b in cont if isinstance(cont, list) else []:
+        if not isinstance(b, dict):
+            continue
+        if b.get('type') == 'tool_use' and b.get('name') == 'AskUserQuestion':
+            for q in (b.get('input') or {}).get('questions') or []:
+                if isinstance(q, dict) and q.get('question'):
+                    out.append(str(q['question']).strip())
+        elif b.get('type') == 'text':
+            codice = False
+            for riga in b.get('text', '').split('\n'):
+                if riga.lstrip().startswith('```'):
+                    codice = not codice
+                elif not codice and '?' in riga:
+                    riga = re.sub(r'^\s*(?:[-*•]\s+|\d+\.\s+|#+\s+)', '', riga).replace('**', '')
+                    for frase in re.split(r'(?<=[.!?:])\s+', riga):
+                        frase = frase.strip()
+                        if len(frase) > 2 and frase.rstrip('*_)"” ').endswith('?'):
+                            out.append(frase)
+    return out
+
+
 def a_capo(testo, largh):
     """va a capo sulle parole; i blocchi ``` restano come sono"""
     out, codice = [], False
@@ -101,14 +133,30 @@ def a_capo(testo, largh):
 
 
 ultimo_chi = None
+SOLO = 'tu' if '--tu' in sys.argv[1:] else 'claude' if '--claude' in sys.argv[1:] else None
 
 
 def stampa(o):
     global ultimo_chi
+    if SOLO == 'tu':
+        domande = domande_di(o)
+        if domande:
+            largh = max(20, shutil.get_terminal_size((100, 24)).columns - 5)
+            print(f'\n{C("1;35", "? CLAUDE CHIEDE")} {C("2", ora(o))}')
+            for d in domande:
+                righe = a_capo(d, largh).split('\n')
+                for i, riga in enumerate(righe):
+                    print(C('35', ('  ? ' if i == 0 else '    ') + riga))
+            sys.stdout.flush()
+            ultimo_chi = 'domande'
+            return
     r = testo_di(o)
     if not r:
         return
     chi, testo = r
+    if SOLO and SOLO != ('claude' if chi == 'errore' else chi):
+        ultimo_chi = None                       # ha parlato l'altro: alla prossima rimetto l'intestazione
+        return
     largh = max(20, shutil.get_terminal_size((100, 24)).columns - 3)
     if chi == 'errore':
         print('  ' + C('2;31', '✗ ' + textwrap.shorten(testo, largh - 2, placeholder='…')), flush=True)
@@ -141,16 +189,19 @@ def leggi(f, resto):
     return righe[-1]
 
 
-def pannelli():
-    """quanti pannelli ha la finestra tmux in cui giro (0 = non lo so / fuori da tmux)"""
+def altri_pannelli():
+    """quanti pannelli della mia finestra tmux NON sono lavori-risposte (-1 = non lo so / fuori da tmux)"""
     pan = os.environ.get('TMUX_PANE')
     if not (os.environ.get('TMUX') and pan):
-        return 0
+        return -1
     try:
-        r = subprocess.run(['tmux', 'list-panes', '-t', pan], capture_output=True, text=True, timeout=5)
-        return len(r.stdout.splitlines()) if r.returncode == 0 else 0
+        r = subprocess.run(['tmux', 'list-panes', '-t', pan, '-F', '#{pane_start_command}'],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return -1
+        return sum(1 for c in r.stdout.splitlines() if 'lavori-risposte' not in c)
     except Exception:
-        return 0
+        return -1
 
 
 def main():
@@ -158,10 +209,10 @@ def main():
     una_volta = '--stampa' in sys.argv[1:]
     cart = cartella_del_lavoro(args[0] if args else '')
     corrente, f, resto, avvisato, giro = None, None, '', False, 0
-    affiancato = pannelli() > 1                 # nato di fianco a Claude Code: quando resto solo, chiudo
+    affiancato = altri_pannelli() > 0           # nato accanto a Claude Code: quando lui chiude, chiudo anch'io
     while True:
         if giro % 4 == 0:                       # ogni ~2s: e' partita una conversazione nuova?
-            if affiancato and pannelli() == 1:
+            if affiancato and altri_pannelli() == 0:
                 break
             nuovo = ultimo_jsonl(cart)
             if nuovo and nuovo != corrente:

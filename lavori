@@ -18,8 +18,10 @@
 #   lavori descrivi <nome> "descrizione"  cambia la descrizione
 #   lavori togli <nome>                   toglie dall'indice (NON cancella cartella ne' conversazioni)
 #   lavori ore [<nome>]                   ore per sessione e totale (di un lavoro, o totali di tutti)
-#   lavori guida [europea|inglese|egiziana]   da che lato scrivi: europea = scrivi a sinistra (default);
-#                                         inglese o egiziana = scrivi a destra. Senza argomenti dice quale hai.
+#   lavori guida [europea|inglese|egiziana|plancia]   come stanno i pannelli: europea = scrivi a sinistra
+#                                         (default); inglese o egiziana = scrivi a destra; plancia = tre pannelli
+#                                         (sopra le risposte, sotto scrivi a sinistra e a destra le tue battute
+#                                         con le domande di Claude). Senza argomenti dice quale hai.
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
@@ -29,8 +31,9 @@
 # Scambi:    aprendo un lavoro su uno schermo largo (>= 120 colonne) la sessione si divide in due: a sinistra
 #            Claude Code dove scrivi e passa il codice, a destra gli scambi tu <-> Claude (lavori-risposte:
 #            restano fermi). LAVORI_RISPOSTE=0 lo spegne; LAVORI_RISPOSTE_MIN cambia la soglia di colonne.
-#            Il lato si sceglie con "lavori guida" (resta salvato in /etc/lavori/guida); per una volta sola:
-#            LAVORI_RISPOSTE_LATO=sinistra|destra (lato degli scambi).
+#            La disposizione si sceglie con "lavori guida" (resta salvata in /etc/lavori/guida); per una
+#            volta sola, nelle guide di fianco: LAVORI_RISPOSTE_LATO=sinistra|destra (lato degli scambi).
+#            La plancia vuole anche almeno 26 righe, senno' apre di fianco come l'europea.
 # Indice:    /etc/lavori/indice.tsv  (nome, sessione tmux, cartella, creato, ultimo uso, descrizione)
 #            copia prima di ogni modifica in /etc/lavori/indice.tsv.prima; blocco con flock
 # Registro:  /var/log/lavori.log    (aperture, creazioni, rimozioni)
@@ -206,16 +209,17 @@ togli() {
     echo "Tolto. Per rimetterlo: lavori nuovo $nome $cart"
 }
 
-guida_scelta() { local g; g=$(head -1 "$DIR/guida" 2>/dev/null); case "$g" in inglese|egiziana) echo "$g" ;; *) echo europea ;; esac; }
+guida_scelta() { local g; g=$(head -1 "$DIR/guida" 2>/dev/null); case "$g" in inglese|egiziana|plancia) echo "$g" ;; *) echo europea ;; esac; }
 guida_frase() { case "$1" in
     europea) echo "Guida europea: scrivi a sinistra, gli scambi con Claude stanno a destra." ;;
+    plancia) echo "Guida plancia: sopra le risposte di Claude; sotto scrivi a sinistra, a destra le tue battute e le domande di Claude." ;;
     *)       echo "Guida $1: scrivi a destra, gli scambi con Claude stanno a sinistra." ;; esac; }
-guida() {   # guida [europea|inglese|egiziana]: da che lato si scrive (lato del pannello degli scambi)
+guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pannelli attorno a Claude Code
     local g; g=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')
     case "$g" in
-        "") guida_frase "$(guida_scelta)"; echo "Per cambiare: lavori guida europea | inglese | egiziana"; return ;;
-        europea|inglese|egiziana) ;;
-        *) errore "guida sconosciuta: $1 (europea, inglese o egiziana)" ;;
+        "") guida_frase "$(guida_scelta)"; echo "Per cambiare: lavori guida europea | inglese | egiziana | plancia"; return ;;
+        europea|inglese|egiziana|plancia) ;;
+        *) errore "guida sconosciuta: $1 (europea, inglese, egiziana o plancia)" ;;
     esac
     printf '%s\n' "$g" > "$DIR/guida" || errore "non riesco a scrivere $DIR/guida"
     registra "guida $g"
@@ -241,13 +245,23 @@ apri() {
     else cmd="'$CLAUDE_BIN' --continue || '$CLAUDE_BIN'"; fi   # ultima conversazione della cartella, o una nuova
     local fine="echo; echo 'Claude chiuso. Invio per chiudere la sessione $sess (lavori $nome per riaprirla).'; read"
     registra "apri $nome (nuova sessione${id:+, conversazione $id})"
-    tmux new-session -d -s "$sess" -c "$cart" "lavori-ore inizio '$nome'; cd '$cart' && $cmd; $fine; lavori-ore fine '$nome'" || errore "tmux non e' riuscito a creare la sessione"
-    # Claude Code a sinistra (dove scrivi), pannello degli scambi tu <-> Claude a destra; solo se lo schermo e' largo
-    local col; col=$(tput cols 2>/dev/null || echo 80)
+    local col rig; col=$(tput cols 2>/dev/null || echo 80); rig=$(tput lines 2>/dev/null || echo 24)
+    [[ "$col" =~ ^[0-9]+$ ]] || col=80; [[ "$rig" =~ ^[0-9]+$ ]] || rig=24
+    # la sessione nasce gia' grande come il terminale, cosi' i pannelli qui sotto hanno le misure giuste
+    tmux new-session -d -s "$sess" -x "$col" -y "$rig" -c "$cart" "lavori-ore inizio '$nome'; cd '$cart' && $cmd; $fine; lavori-ore fine '$nome'" || errore "tmux non e' riuscito a creare la sessione"
+    # pannelli degli scambi attorno a Claude Code (vedi "lavori guida"); solo se lo schermo e' largo
     if [ "${LAVORI_RISPOSTE:-1}" != 0 ] && [ "$col" -ge "${LAVORI_RISPOSTE_MIN:-120}" ] && command -v lavori-risposte >/dev/null; then
-        local lato=-h g; g=$(guida_scelta)                    # europea: scambi a destra; inglese/egiziana: a sinistra
-        [ "${LAVORI_RISPOSTE_LATO:-$([ "$g" = europea ] && echo destra || echo sinistra)}" = sinistra ] && lato=-hb
-        tmux split-window $lato -d -l 60% -t "=$sess:" "lavori-risposte '$nome'" 2>/dev/null || true
+        local lato=-h g; g=$(guida_scelta)
+        if [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
+            # plancia: sopra le risposte di Claude; sotto Claude Code a sinistra, a destra le tue battute + le sue domande
+            tmux split-window -vb -d -l 55% -t "=$sess:" "lavori-risposte '$nome' --claude" 2>/dev/null || true
+            tmux split-window -h  -d -l 48% -t "=$sess:" "lavori-risposte '$nome' --tu" 2>/dev/null || true
+        else
+            # di fianco. europea: scambi a destra; inglese/egiziana: a sinistra (plancia su schermo basso: come europea)
+            case "$g" in inglese|egiziana) g=sinistra ;; *) g=destra ;; esac
+            [ "${LAVORI_RISPOSTE_LATO:-$g}" = sinistra ] && lato=-hb
+            tmux split-window $lato -d -l 60% -t "=$sess:" "lavori-risposte '$nome'" 2>/dev/null || true
+        fi
     fi
     if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
     exec tmux attach -t "=$sess"

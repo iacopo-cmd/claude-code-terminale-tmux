@@ -72,7 +72,7 @@ quello che è aperto.
 | `lavori descrivi <nome> "descrizione"` | cambia la descrizione |
 | `lavori togli <nome>` | toglie dall'indice (chiede conferma); **non cancella** cartella né conversazioni |
 | `lavori ore [<nome>]` | ore per sessione e totale di un lavoro, o la tabella dei totali di tutti |
-| `lavori guida [europea\|inglese\|egiziana]` | da che lato scrivi: `europea` = scrivi a sinistra (default); `inglese` o `egiziana` = scrivi a destra. Senza argomenti dice quale hai |
+| `lavori guida [europea\|inglese\|egiziana\|plancia]` | come stanno i pannelli: `europea` = scrivi a sinistra (default); `inglese` o `egiziana` = scrivi a destra; `plancia` = tre pannelli. Senza argomenti dice quale hai |
 | `lavori aiuto` | la guida |
 
 Il menu (`lavori` senza argomenti) e l'elenco sono a **riquadro/griglia**, con descrizione intera a capo e si
@@ -116,14 +116,42 @@ poi `Ctrl-b [` e le frecce (`q` per uscire, `Ctrl-b ←` per tornare a scrivere)
 chiude da solo.
 
 - `LAVORI_RISPOSTE=0` lo spegne; `LAVORI_RISPOSTE_MIN=<colonne>` cambia la soglia (default 120).
-- **Da che lato scrivi** si sceglie con `lavori guida`:
+- **La disposizione** si sceglie con `lavori guida`:
   - `lavori guida europea` — scrivi a sinistra, scambi a destra (default, il disegno qui sopra);
-  - `lavori guida inglese` oppure `lavori guida egiziana` — scrivi a destra, scambi a sinistra.
+  - `lavori guida inglese` oppure `lavori guida egiziana` — scrivi a destra, scambi a sinistra;
+  - `lavori guida plancia` — tre pannelli (vedi sotto).
 
-  La scelta resta salvata in `/etc/lavori/guida` e vale dalla prossima apertura. Per una volta sola:
-  `LAVORI_RISPOSTE_LATO=sinistra lavori <nome>` (è il lato degli scambi).
+  La scelta resta salvata in `/etc/lavori/guida` e vale dalla prossima apertura. Per una volta sola, nelle guide
+  di fianco: `LAVORI_RISPOSTE_LATO=sinistra lavori <nome>` (è il lato degli scambi).
+
+#### La plancia (tre pannelli)
+
+```
+┌─ le risposte di Claude ───────────────────────────────────────┐
+│ ● CLAUDE 06:02                                                │
+│   È in prova: nel pannello in basso a destra ...              │
+├─ Claude Code (qui scrivi) ──────┬─ le tue battute + domande ──┤
+│                                 │ ? CLAUDE CHIEDE 06:02       │
+│ > _                             │   ? Provo così?             │
+│                                 │ ▶ TU 06:03                  │
+│                                 │   si prova così             │
+└─────────────────────────────────┴─────────────────────────────┘
+```
+
+Sopra restano le risposte di Claude, a tutta larghezza. Sotto a sinistra c'è Claude Code, dove scrivi e dove
+passano codice e tool. Sotto a destra ci sono le tue battute e, in viola, le **domande che Claude ti fa** (le frasi
+che finiscono con `?` e le domande a scelta): vedi cosa aspetta risposta e cosa hai risposto. Serve un terminale
+di almeno 120 colonne e 26 righe; se è più basso apre di fianco come la guida europea.
+
+A mano, in una sessione già aperta (dal pannello di Claude Code):
+
+```
+tmux split-window -vb -d -l 55% 'lavori-risposte --claude'
+tmux split-window -h  -d -l 48% 'lavori-risposte --tu'
+```
 - A mano, in una sessione già aperta: `tmux split-window -h -d -l 60% lavori-risposte`
-- Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce.
+- Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce
+  (con `--tu` solo le tue battute e le domande di Claude, con `--claude` solo le sue risposte).
 
 ### Barra di stato tmux (facoltativo)
 Per avere in basso ⏱ tempo, 🪙 token e ● sessioni aperte, aggiungi al tuo `~/.tmux.conf`:
