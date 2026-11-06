@@ -90,6 +90,8 @@ prepara() {
 righe() { grep -v '^#' "$INDICE" | grep -v '^[[:space:]]*$' || true; }
 campo() { righe | awk -F'\t' -v n="$1" -v c="$2" '$1 == n { print $c; exit }'; }
 esiste() { [ -n "$(campo "$1" 1)" ]; }
+# risolve un nome scritto in qualsiasi maiuscole/minuscole nel nome VERO dell'indice (o niente)
+canon()  { righe | awk -F'\t' -v n="$1" 'BEGIN{n=tolower(n)} tolower($1)==n{print $1; exit}'; }
 
 # Modifica l'indice in modo sicuro: blocco, copia, scrittura su file temporaneo, sostituzione
 modifica() {   # modifica <comando awk che legge stdin e scrive il nuovo indice>
@@ -114,7 +116,8 @@ elenco() {
 }
 
 info() {
-    local nome=$1; esiste "$nome" || errore "lavoro sconosciuto: $nome (elenco: lavori)"
+    local nome; nome=$(canon "$1"); [ -n "$nome" ] || nome=$1
+    esiste "$nome" || errore "lavoro sconosciuto: $1 (elenco: lavori)"
     local sess cart cc
     sess=$(campo "$nome" 2); cart=$(campo "$nome" 3); cc=$(cartella_claude "$cart")
     echo "Lavoro:       $nome — $(campo "$nome" 6)"
@@ -136,11 +139,11 @@ info() {
 }
 
 nuovo() {
-    local nome=${1:-} cart=${2:-} descr=${3:-}
+    local nome=${1:-} cart=${2:-} descr=${3:-} vero
     [ -n "$nome" ] && [ -n "$cart" ] || errore "uso: lavori nuovo <nome> <cartella> [\"descrizione\"]"
     [[ "$nome" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$ ]] || errore "nome non valido: lettere (anche MAIUSCOLE), numeri, - e _ (max 24), es. Sito-Casa"
     [[ "$RISERVATI" == *" $nome "* ]] && errore "nome riservato: $nome"
-    esiste "$nome" && errore "esiste gia': $nome -> $(campo "$nome" 3)"
+    vero=$(canon "$nome"); [ -n "$vero" ] && errore "esiste gia' (anche con altre maiuscole): $vero -> $(campo "$vero" 3)"
     [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
     case "$cart" in *[[:space:]]*) errore "la cartella non puo' contenere spazi: $cart" ;; esac
     cart=$(realpath -m -- "$cart")
@@ -175,8 +178,9 @@ EOF
 }
 
 descrivi() {
-    local nome=${1:-} descr=${2:-}
-    esiste "$nome" || errore "lavoro sconosciuto: $nome"
+    local descr=${2:-} nome
+    nome=$(canon "${1:-}"); [ -n "$nome" ] || nome=${1:-}
+    esiste "$nome" || errore "lavoro sconosciuto: ${1:-}"
     [ -n "$descr" ] || errore "uso: lavori descrivi <nome> \"descrizione\""
     [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
     modifica -v n="$nome" -v d="$descr" '$1 == n { $6 = d } { print }'
@@ -184,8 +188,9 @@ descrivi() {
 }
 
 togli() {
-    local nome=${1:-}
-    esiste "$nome" || errore "lavoro sconosciuto: $nome"
+    local nome
+    nome=$(canon "${1:-}"); [ -n "$nome" ] || nome=${1:-}
+    esiste "$nome" || errore "lavoro sconosciuto: ${1:-}"
     local cart; cart=$(campo "$nome" 3)
     read -r -p "Togliere \"$nome\" dall'indice? Cartella ($cart) e conversazioni restano. [s/N] " r
     [[ "$r" =~ ^[sS]$ ]] || { echo "Annullato."; exit 0; }
@@ -195,7 +200,8 @@ togli() {
 }
 
 apri() {
-    local nome=$1 id=${2:-}
+    local nome=$1 id=${2:-} v
+    v=$(canon "$nome"); [ -n "$v" ] && nome=$v
     esiste "$nome" || { echo "lavori: lavoro sconosciuto: $nome" >&2; echo; elenco; exit 1; }
     local sess cart; sess=$(campo "$nome" 2); cart=$(campo "$nome" 3)
     [ -d "$cart" ] || errore "la cartella non esiste: $cart"
@@ -261,7 +267,7 @@ chiedi_nuovo() {
         [ -z "$nome" ] && { echo "  Serve un nome."; continue; }
         if ! [[ "$nome" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$ ]]; then echo "  Solo lettere, numeri, - e _ (max 24), niente spazi."; continue; fi
         if [[ "$RISERVATI" == *" $nome "* ]]; then echo "  \"$nome\" è riservato, scegline un altro."; continue; fi
-        if esiste "$nome"; then echo "  Esiste già: $nome -> $(campo "$nome" 3)"; continue; fi
+        if [ -n "$(canon "$nome")" ]; then echo "  Esiste già (anche con altre maiuscole): $(canon "$nome")"; continue; fi
         break
     done
     if [ -d /Progetti ]; then base=/Progetti; else base=$HOME/lavori; fi
@@ -320,7 +326,7 @@ case "${1:-}" in
     info)               [ -n "${2:-}" ] || errore "uso: lavori info <nome>"; info "$2" ;;
     descrivi)           shift; descrivi "$@" ;;
     togli)              shift; togli "$@" ;;
-    ore)                if [ -n "${2:-}" ]; then esiste "$2" || errore "lavoro sconosciuto: $2"; fi; exec lavori-ore mostra "${2:-}" ;;
+    ore)                if [ -n "${2:-}" ]; then v=$(canon "$2"); [ -n "$v" ] || errore "lavoro sconosciuto: $2"; else v=""; fi; exec lavori-ore mostra "$v" ;;
     -*)                 errore "opzione sconosciuta: $1 (lavori aiuto)" ;;
     *)                  apri "$@" ;;
 esac
