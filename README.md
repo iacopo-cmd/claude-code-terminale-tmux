@@ -91,9 +91,32 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 | comando | `/usr/local/bin/lavori` |
 | conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
 | barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte) |
+| pannello scambi | `/usr/local/bin/lavori-risposte` (gli scambi tu ↔ Claude in un pannello a parte; serve `python3`) |
 | indice | `/etc/lavori/indice.tsv` (nome, sessione tmux, cartella, creato, ultimo uso, descrizione); a ogni modifica copia in `indice.tsv.prima`, scrittura su file temporaneo, blocco con `flock` |
 | registro | `/var/log/lavori.log` (aperture, creazioni, rimozioni) |
 | riga di stato (Claude) | `~/.claude/avviso-tmux.sh` (facoltativo, vedi sotto) |
+
+### Pannello degli scambi
+Mentre Claude lavora, le sue risposte scorrono via insieme al codice. Aprendo un lavoro su uno schermo largo
+(almeno 120 colonne) la sessione si divide in due pannelli:
+
+```
+┌─ scambi tu ↔ Claude ──────────────┬─ Claude Code ───────────┐
+│ ▶ TU 05:44                        │ (qui scrivi, qui passano│
+│   si parti con lo script          │  codice, tool, domande) │
+│ ● CLAUDE 05:45                    │                         │
+│   Lo script è nel repo e ...      │ > _                     │
+└───────────────────────────────────┴─────────────────────────┘
+```
+
+A sinistra restano solo le tue battute e le risposte in testo di Claude (niente tool, niente codice), lette dal
+vivo dal transcript della conversazione; a destra c'è Claude Code normale. Per rileggere: `Ctrl-b ←`, poi
+`Ctrl-b [` e le frecce (`q` per uscire, `Ctrl-b →` per tornare a scrivere). Quando chiudi Claude il pannello si
+chiude da solo.
+
+- `LAVORI_RISPOSTE=0` lo spegne; `LAVORI_RISPOSTE_MIN=<colonne>` cambia la soglia (default 120).
+- A mano, in una sessione già aperta: `tmux split-window -hb -d -l 60% lavori-risposte`
+- Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce.
 
 ### Barra di stato tmux (facoltativo)
 Per avere in basso ⏱ tempo, 🪙 token e ● sessioni aperte, aggiungi al tuo `~/.tmux.conf`:

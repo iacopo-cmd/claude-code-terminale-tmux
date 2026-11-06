@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+# lavori-risposte - pannello "risposte": mostra solo le tue battute e le risposte in testo di Claude,
+# senza tool e senza codice, seguendo dal vivo il transcript (.jsonl) del lavoro. Pensato per stare in
+# un pannello tmux sopra a Claude Code: sotto scorre il codice, qui il discorso resta fermo.
+#
+# Uso:  lavori-risposte [nome-lavoro | cartella] [--stampa]
+#   senza argomenti: dentro tmux usa il nome della sessione, altrimenti la cartella corrente
+#   --stampa: stampa quello che c'e' ed esce (senza restare in ascolto)
+# Prova a mano, dentro la sessione di un lavoro:
+#   tmux split-window -hb -d -l 60% lavori-risposte
+# "lavori <nome>" lo apre da solo a sinistra se lo schermo e' largo; quando Claude si chiude e questo
+# pannello resta l'unico della finestra, esce (cosi' la sessione tmux non resta appesa).
+import datetime, glob, json, os, re, shutil, subprocess, sys, textwrap, time
+
+IDX = os.path.join(os.environ.get('LAVORI_DIR', '/etc/lavori'), 'indice.tsv')
+PROG = os.environ.get('PROGETTI_CLAUDE', os.path.expanduser('~/.claude/projects'))
+COLORI = sys.stdout.isatty() and not os.environ.get('NO_COLOR')
+C = (lambda c, s: f'\033[{c}m{s}\033[0m') if COLORI else (lambda c, s: s)
+
+
+def cartella_del_lavoro(arg):
+    """nome lavoro/sessione (o cartella) -> cartella del lavoro"""
+    if arg and (os.sep in arg or os.path.isdir(arg)):
+        return os.path.abspath(arg)
+    if not arg and os.environ.get('TMUX'):
+        try:
+            pan = ['-t', os.environ['TMUX_PANE']] if os.environ.get('TMUX_PANE') else []
+            arg = subprocess.run(['tmux', 'display-message', '-p'] + pan + ['#S'],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+        except Exception:
+            arg = ''
+    if arg:
+        try:
+            with open(IDX, encoding='utf-8', errors='replace') as f:
+                for riga in f:
+                    c = riga.rstrip('\n').split('\t')
+                    if riga.startswith('#') or len(c) < 3:
+                        continue
+                    if arg.lower() in (c[0].lower(), c[1].lower()):
+                        return c[2]
+        except OSError:
+            pass
+        if len(sys.argv) > 1 and not sys.argv[1].startswith('--'):
+            sys.exit(f'lavori-risposte: lavoro "{arg}" non trovato in {IDX}')
+    return os.getcwd()
+
+
+def ultimo_jsonl(cart):
+    chiave = re.sub(r'[^A-Za-z0-9]', '-', cart)
+    files = glob.glob(os.path.join(PROG, chiave, '*.jsonl'))
+    return max(files, key=os.path.getmtime) if files else None
+
+
+def ora(o):
+    try:
+        t = datetime.datetime.fromisoformat(o['timestamp'].replace('Z', '+00:00'))
+        return t.astimezone().strftime('%H:%M')
+    except Exception:
+        return ''
+
+
+def testo_di(o):
+    """riga del transcript -> ('tu'|'claude', testo) oppure None se non e' discorso"""
+    if o.get('isSidechain') or o.get('isMeta'):
+        return None
+    tipo = o.get('type')
+    if tipo not in ('user', 'assistant'):
+        return None
+    cont = (o.get('message') or {}).get('content')
+    if isinstance(cont, list):
+        cont = '\n'.join(b.get('text', '') for b in cont
+                         if isinstance(b, dict) and b.get('type') == 'text')
+    if not isinstance(cont, str):
+        return None
+    cont = cont.strip()
+    if tipo == 'user':
+        # via i blocchi di servizio (comandi locali, promemoria di sistema)
+        cont = re.sub(r'<(system-reminder|local-command-[a-z]+|command-[a-z]+)>.*?</\1>', '',
+                      cont, flags=re.S).strip()
+    if not cont:
+        return None
+    if o.get('isApiErrorMessage'):              # errore API: una riga sola, non tutto il papiro
+        return 'errore', cont.split('\n')[0]
+    return ('tu' if tipo == 'user' else 'claude'), cont
+
+
+def a_capo(testo, largh):
+    """va a capo sulle parole; i blocchi ``` restano come sono"""
+    out, codice = [], False
+    for riga in testo.split('\n'):
+        if riga.lstrip().startswith('```'):
+            codice = not codice
+            out.append(riga)
+        elif codice or len(riga) <= largh:
+            out.append(riga)
+        else:
+            rientro = re.match(r'\s*(?:[-*•]\s+|\d+\.\s+)?', riga).group(0)
+            out.extend(textwrap.wrap(riga, largh, subsequent_indent=' ' * len(rientro),
+                                     break_long_words=False, break_on_hyphens=False) or [''])
+    return '\n'.join(out)
+
+
+ultimo_chi = None
+
+
+def stampa(o):
+    global ultimo_chi
+    r = testo_di(o)
+    if not r:
+        return
+    chi, testo = r
+    largh = max(20, shutil.get_terminal_size((100, 24)).columns - 3)
+    if chi == 'errore':
+        print('  ' + C('2;31', '✗ ' + textwrap.shorten(testo, largh - 2, placeholder='…')), flush=True)
+        ultimo_chi = None                       # dopo un errore si riparte con l'intestazione
+        return
+    if chi != ultimo_chi:
+        if chi == 'tu':
+            testa = C('1;33', '▶ TU')
+        else:
+            testa = C('1;36', '● CLAUDE')
+        print(f'\n{testa} {C("2", ora(o))}')
+        ultimo_chi = chi
+    else:
+        print()
+    for riga in a_capo(testo, largh).split('\n'):
+        print('  ' + (C('33', riga) if chi == 'tu' else riga))
+    sys.stdout.flush()
+
+
+def leggi(f, resto):
+    """legge le righe nuove complete; ritorna il pezzo di riga ancora incompleto"""
+    dati = resto + f.read()
+    righe = dati.split('\n')
+    for riga in righe[:-1]:
+        if riga.strip():
+            try:
+                stampa(json.loads(riga))
+            except ValueError:
+                pass
+    return righe[-1]
+
+
+def pannelli():
+    """quanti pannelli ha la finestra tmux in cui giro (0 = non lo so / fuori da tmux)"""
+    pan = os.environ.get('TMUX_PANE')
+    if not (os.environ.get('TMUX') and pan):
+        return 0
+    try:
+        r = subprocess.run(['tmux', 'list-panes', '-t', pan], capture_output=True, text=True, timeout=5)
+        return len(r.stdout.splitlines()) if r.returncode == 0 else 0
+    except Exception:
+        return 0
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    una_volta = '--stampa' in sys.argv[1:]
+    cart = cartella_del_lavoro(args[0] if args else '')
+    corrente, f, resto, avvisato, giro = None, None, '', False, 0
+    affiancato = pannelli() > 1                 # nato di fianco a Claude Code: quando resto solo, chiudo
+    while True:
+        if giro % 4 == 0:                       # ogni ~2s: e' partita una conversazione nuova?
+            if affiancato and pannelli() == 1:
+                break
+            nuovo = ultimo_jsonl(cart)
+            if nuovo and nuovo != corrente:
+                if f:
+                    f.close()
+                    print('\n' + C('2', '─── nuova conversazione ───'))
+                corrente, resto = nuovo, ''
+                f = open(corrente, encoding='utf-8', errors='replace')
+            elif not nuovo and not avvisato and not una_volta:
+                print(C('2', f'in attesa della prima conversazione in {cart} ...'), flush=True)
+                avvisato = True
+        if f:
+            resto = leggi(f, resto)
+        if una_volta:
+            break
+        giro += 1
+        time.sleep(0.5)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except BrokenPipeError:                     # es. "lavori-risposte --stampa | head"
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

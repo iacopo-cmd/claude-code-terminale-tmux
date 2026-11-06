@@ -15,8 +15,10 @@ if [ -e /usr/local/bin/lavori-ore ] && ! cmp -s "$QUI/lavori-ore" /usr/local/bin
 fi
 install -m 755 "$QUI/lavori-ore" /usr/local/bin/lavori-ore
 install -m 755 "$QUI/lavori-barra" /usr/local/bin/lavori-barra
+install -m 755 "$QUI/lavori-risposte" /usr/local/bin/lavori-risposte
+command -v python3 >/dev/null || echo "Nota: manca python3, il pannello degli scambi (lavori-risposte) non partira'."
 mkdir -p /etc/lavori && chmod 700 /etc/lavori
-echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra (indice in /etc/lavori/indice.tsv)."
+echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra, lavori-risposte (indice in /etc/lavori/indice.tsv)."
 
 mkdir -p "$HOME/.claude"
 if [ -e "$HOME/.claude/avviso-tmux.sh" ] && ! cmp -s "$QUI/avviso-tmux.sh" "$HOME/.claude/avviso-tmux.sh"; then
