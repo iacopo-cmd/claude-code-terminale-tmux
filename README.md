@@ -115,6 +115,8 @@ poi `Ctrl-b [` e le frecce (`q` per uscire, `Ctrl-b ←` per tornare a scrivere)
 chiude da solo.
 
 - `LAVORI_RISPOSTE=0` lo spegne; `LAVORI_RISPOSTE_MIN=<colonne>` cambia la soglia (default 120).
+- `LAVORI_RISPOSTE_LATO=sinistra` inverte i pannelli: scambi a sinistra e Claude Code a destra (per chi guida
+  dall'altra parte). Per averlo sempre: `export LAVORI_RISPOSTE_LATO=sinistra` nel tuo `~/.bashrc`.
 - A mano, in una sessione già aperta: `tmux split-window -h -d -l 60% lavori-risposte`
 - Fuori da tmux: `lavori-risposte <nome> --stampa` stampa gli scambi dell'ultima conversazione ed esce.
 
