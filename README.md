@@ -91,7 +91,7 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 |---|---|
 | comando | `/usr/local/bin/lavori` |
 | conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
-| barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte) |
+| barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte; ⚠ se lo schermo è piccolo per i pannelli) |
 | pannello scambi | `/usr/local/bin/lavori-risposte` (gli scambi tu ↔ Claude in un pannello a parte; serve `python3`) |
 | indice | `/etc/lavori/indice.tsv` (nome, sessione tmux, cartella, creato, ultimo uso, descrizione); a ogni modifica copia in `indice.tsv.prima`, scrittura su file temporaneo, blocco con `flock` |
 | registro | `/var/log/lavori.log` (aperture, creazioni, rimozioni) |
@@ -161,6 +161,9 @@ set -g status-interval 15
 set -g status-right-length 90
 set -g status-right ' #S  #(/usr/local/bin/lavori-barra #S)'
 ```
+
+Quando il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida
+`plancia`), davanti a tutto compare `⚠ metti a tutto schermo (ora 100x25)`; sparisce da solo quando lo allarghi.
 
 Si possono cambiare con le variabili `LAVORI_DIR`, `LAVORI_REGISTRO`, `CLAUDE_BIN`, `PROGETTI_CLAUDE`.
 

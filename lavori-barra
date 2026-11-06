@@ -1,6 +1,7 @@
 #!/bin/bash
 # lavori-barra - contenuto della barra di stato tmux (in basso). Monitora, per default tutto acceso:
 #   ⏱ tempo trascorso della sessione · 🪙 token della conversazione corrente · ● sessioni aperte
+#   e, solo quando serve, davanti a tutto: ⚠ metti a tutto schermo (il terminale e' piccolo per i pannelli)
 # Lo chiama tmux (status-right) col nome sessione:  #(lavori-barra #S)
 # Spiegazione della leggenda: comando "aiuto".
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -14,11 +15,20 @@ nfmt(){ local n=${1:-0}
   else printf '%d' "$n"; fi; }
 
 out=""
+# ⚠ schermo troppo piccolo per i pannelli (vedi "lavori guida"): lo dice qui, in italiano. Servono 120 colonne;
+#   la plancia vuole anche 26 righe di terminale (= 25 di finestra, una se la prende questa barra).
+read -r larg alt < <(tmux display-message -p -t "=$s:" '#{window_width} #{window_height}' 2>/dev/null)
+if [[ "${larg:-}" =~ ^[0-9]+$ && "${alt:-}" =~ ^[0-9]+$ ]]; then
+  minalt=0; [ "$(head -1 "${LAVORI_DIR:-/etc/lavori}/guida" 2>/dev/null)" = plancia ] && minalt=25
+  if [ "$larg" -lt 120 ] || [ "$alt" -lt "$minalt" ]; then
+    out+="⚠ metti a tutto schermo (ora ${larg}x$((alt+1)))"
+  fi
+fi
 # ⏱ tempo trascorso della sessione
 creato=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>/dev/null | awk -v n="$s" '$1==n{print $2; exit}')
 if [ -n "$creato" ]; then
   d=$(( $(date +%s) - creato )); [ "$d" -lt 0 ] && d=0
-  out+="⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
+  out+=" · ⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
 fi
 # 🪙 token della conversazione corrente (ultimo .jsonl della cartella del lavoro di questa sessione)
 cart=$(awk -F'\t' -v n="$s" '!/^#/ && $2==n{print $3; exit}' "$IDX" 2>/dev/null)
