@@ -73,7 +73,7 @@ quello che è aperto.
 | `lavori togli <nome>` | toglie dall'indice (chiede conferma); **non cancella** cartella né conversazioni |
 | `lavori ore [<nome>]` | ore per sessione e totale di un lavoro, o la tabella dei totali di tutti |
 | `lavori guida [europea\|inglese\|egiziana\|plancia]` | come stanno i pannelli: `europea` = scrivi a sinistra (default); `inglese` o `egiziana` = scrivi a destra; `plancia` = tre pannelli. Senza argomenti dice quale hai |
-| `lavori iacopo [on\|off]` | **iacopostyle**: accende o spegne firma e pannelli su tutte le sessioni, aperte e nuove (uguale: `lavori stile`, `lavori styl`, `lavori iacopostyle`). Senza `on`/`off` dice com'è adesso |
+| `lavori iacopo [on\|off]` | **iacopostyle**: accende o spegne i pannelli su tutte le sessioni, aperte e nuove (uguale: `lavori stile`, `lavori styl`, `lavori iacopostyle`). Senza `on`/`off` dice com'è adesso |
 | `lavori aiuto` | la guida |
 
 Il menu (`lavori` senza argomenti) e l'elenco sono a **riquadro/griglia**, con descrizione intera a capo e si
@@ -156,18 +156,21 @@ tmux split-window -h  -d -l 48% 'lavori-risposte --tu'
   (con `--tu` solo le tue battute e le domande di Claude, con `--claude` solo le sue risposte).
 
 ### Iacopostyle: l'interruttore
-Firma nella barra e pannelli degli scambi insieme si chiamano **iacopostyle**, e si accendono o spengono con un
-comando solo, su **tutte le sessioni aperte** e su quelle che aprirai:
+I pannelli degli scambi si chiamano **iacopostyle**, e si accendono o spengono con un comando solo, su **tutte le
+sessioni aperte** e su quelle che aprirai:
 
 ```
-lavori iacopo off     # Claude Code da solo: via i pannelli e la firma
-lavori iacopo on      # rimette firma e pannelli (secondo "lavori guida")
+lavori iacopo off     # Claude Code da solo: via i pannelli
+lavori iacopo on      # rimette i pannelli (secondo "lavori guida")
 lavori iacopo         # dice com'è adesso
 ```
 
+La barra in basso resta sempre, anche da spento, così sai come riaccendere: a sinistra, accanto al nome della
+sessione, c'è `✎ per la mod: iacopo off | on · Iacopo, 6 novembre 2026`; a destra lo stato, `iacopostyle on` o `off`.
+
 C'è anche il comando corto, senza `lavori` davanti: `iacopo on`, `iacopo off`, `iacopo`.
 Al posto di `lavori iacopo` vanno bene anche `lavori stile`, `lavori styl` e `lavori iacopostyle`. Lo stato resta salvato in
-`/etc/lavori/stile` e si legge in fondo alla barra in basso: `… ● 2 aperte · iacopostyle on`.
+`/etc/lavori/stile`.
 
 ### Barra di stato tmux (facoltativo)
 Per avere in basso ⏱ tempo, 🪙 token, ● sessioni aperte e lo stato dell'iacopostyle, aggiungi al tuo `~/.tmux.conf`:
@@ -221,5 +224,5 @@ MIT. Nessuna garanzia: lo usi a tuo rischio (vedi le avvertenze qui sopra).
 
 ---
 
-✎ **Terminale personalizzato da Iacopo · 6 novembre 2026** — la stessa firma compare nella barra in basso di ogni
-lavoro, accanto al nome della sessione (`LAVORI_FIRMA=""` la toglie).
+✎ **Terminale personalizzato da Iacopo · 6 novembre 2026** — nome e data compaiono anche nella barra in basso di
+ogni lavoro, accanto al nome della sessione (`LAVORI_FIRMA=""` toglie la scritta).

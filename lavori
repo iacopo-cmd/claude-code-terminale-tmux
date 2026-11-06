@@ -22,10 +22,11 @@
 #                                         (default); inglese o egiziana = scrivi a destra; plancia = tre pannelli
 #                                         (sopra le risposte, sotto scrivi a sinistra e a destra le tue battute
 #                                         con le domande di Claude). Senza argomenti dice quale hai.
-#   lavori iacopo [on|off]                iacopostyle: accende o spegne firma e pannelli su TUTTE le sessioni,
+#   lavori iacopo [on|off]                iacopostyle: accende o spegne i pannelli su TUTTE le sessioni,
 #                                         aperte e nuove (uguale: lavori stile, lavori styl, lavori iacopostyle;
 #                                         comando corto: iacopo on | iacopo off).
-#                                         Senza on/off dice com'e' adesso. Lo stato si legge anche nella barra.
+#                                         Senza on/off dice com'e' adesso. La barra in basso resta sempre: a
+#                                         sinistra ricorda il comando, a destra dice se e' on o off.
 #   lavori promemoria                     due righe: lavori aperti e come si usa (per il login SSH)
 #   lavori aiuto                          questo testo
 #
@@ -51,8 +52,9 @@ REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
 CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude || echo "$HOME/.local/bin/claude")}
 PROGETTI_CLAUDE=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
-# Firma nella barra di tmux, accanto al nome della sessione (LAVORI_FIRMA="" la toglie)
-FIRMA=${LAVORI_FIRMA-✎ terminale personalizzato da Iacopo · 6 novembre 2026}
+# Scritta nella barra di tmux, accanto al nome della sessione: come si accende/spegne la mod, e la firma.
+# Resta anche con la mod spenta, cosi' si sa come riaccenderla (LAVORI_FIRMA="" la toglie)
+FIRMA=${LAVORI_FIRMA-✎ per la mod: iacopo off | on · Iacopo, 6 novembre 2026}
 RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl "
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
@@ -232,17 +234,19 @@ guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pan
     guida_frase "$g"; echo "Vale dalla prossima apertura di un lavoro (le sessioni gia' aperte restano come sono)."
 }
 
-# --- Iacopostyle: firma nella barra + pannelli degli scambi attorno a Claude Code. Interruttore: lavori iacopo on|off
+# --- Iacopostyle: i pannelli degli scambi attorno a Claude Code. Interruttore: iacopo on|off (la barra resta sempre)
 stile_stato() { [ "$(head -1 "$DIR/stile" 2>/dev/null)" = off ] && echo off || echo on; }
 _pannelli_scambi() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '/lavori-risposte/{print $1}'; }
 _pannello_claude() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '!/lavori-risposte/{print $1; exit}'; }
-vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette firma e pannelli (se non ci sono gia')
-    local sess=$1 nome=$2 col=$3 rig=$4 p lato=-h g
+barra() {   # barra <sessione>: la scritta nella barra in basso, accanto al nome. C'e' sempre, anche con la mod spenta
+    local sess=$1
     tmux set-option -t "=$sess:" status-right-length 120 2>/dev/null || true
-    if [ -n "$FIRMA" ]; then      # firma nella barra in basso, accanto al nome della sessione
-        tmux set-option -t "=$sess:" status-left "[#{session_name}] $FIRMA " 2>/dev/null || true
-        tmux set-option -t "=$sess:" status-left-length 100 2>/dev/null || true
-    fi
+    [ -n "$FIRMA" ] || return 0
+    tmux set-option -t "=$sess:" status-left "[#{session_name}] $FIRMA " 2>/dev/null || true
+    tmux set-option -t "=$sess:" status-left-length 100 2>/dev/null || true
+}
+vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette i pannelli degli scambi (se non ci sono gia')
+    local sess=$1 nome=$2 col=$3 rig=$4 p lato=-h g
     # pannelli degli scambi (vedi "lavori guida"); solo se lo schermo e' largo
     [ "${LAVORI_RISPOSTE:-1}" != 0 ] && [ "$col" -ge "${LAVORI_RISPOSTE_MIN:-120}" ] && command -v lavori-risposte >/dev/null || return 0
     [ -z "$(_pannelli_scambi "$sess")" ] || return 0
@@ -259,10 +263,8 @@ vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette fir
         tmux split-window $lato -d -l 60% -t "$p" "lavori-risposte '$nome'" 2>/dev/null || true
     fi
 }
-spoglia() {   # spoglia <sessione>: toglie firma e pannelli degli scambi, resta Claude Code da solo
+spoglia() {   # spoglia <sessione>: toglie i pannelli degli scambi, resta Claude Code da solo (la barra resta)
     local sess=$1 p
-    tmux set-option -u -t "=$sess:" status-left 2>/dev/null || true
-    tmux set-option -u -t "=$sess:" status-left-length 2>/dev/null || true
     [ -n "$(_pannello_claude "$sess")" ] || return 0     # mai chiudere l'ultimo pannello
     for p in $(_pannelli_scambi "$sess"); do tmux kill-pane -t "$p" 2>/dev/null || true; done
 }
@@ -278,6 +280,7 @@ stile() {   # stile [on|off]: accende/spegne l'iacopostyle su tutte le sessioni 
     registra "iacopostyle $v"
     while IFS=$'\t' read -r nome sess resto; do
         aperta "$sess" || continue
+        barra "$sess"
         if [ "$v" = on ]; then
             dim=$(tmux display-message -p -t "=$sess:" '#{window_width} #{window_height}' 2>/dev/null); col=${dim% *}; rig=${dim#* }
             [[ "$col" =~ ^[0-9]+$ && "$rig" =~ ^[0-9]+$ ]] || continue
@@ -288,8 +291,8 @@ stile() {   # stile [on|off]: accende/spegne l'iacopostyle su tutte le sessioni 
         n=$((n+1))
     done < <(righe)
     tmux refresh-client -S 2>/dev/null || true
-    if [ "$v" = on ]; then echo "Iacopostyle on: firma e pannelli degli scambi su $n sessioni aperte e su quelle che aprirai."
-    else echo "Iacopostyle off: Claude Code da solo, senza firma e senza pannelli, su $n sessioni aperte e su quelle che aprirai."; fi
+    if [ "$v" = on ]; then echo "Iacopostyle on: pannelli degli scambi su $n sessioni aperte e su quelle che aprirai."
+    else echo "Iacopostyle off: Claude Code da solo, senza pannelli, su $n sessioni aperte e su quelle che aprirai. Per riaccendere: iacopo on"; fi
 }
 
 apri() {
@@ -315,7 +318,8 @@ apri() {
     [[ "$col" =~ ^[0-9]+$ ]] || col=80; [[ "$rig" =~ ^[0-9]+$ ]] || rig=24
     # la sessione nasce gia' grande come il terminale, cosi' i pannelli qui sotto hanno le misure giuste
     tmux new-session -d -s "$sess" -x "$col" -y "$rig" -c "$cart" "lavori-ore inizio '$nome'; cd '$cart' && $cmd; $fine; lavori-ore fine '$nome'" || errore "tmux non e' riuscito a creare la sessione"
-    # iacopostyle (firma nella barra + pannelli degli scambi): solo se l'interruttore e' acceso
+    # la scritta nella barra c'e' sempre; i pannelli degli scambi solo se l'interruttore (iacopo on|off) e' acceso
+    barra "$sess"
     [ "$(stile_stato)" = on ] && vesti "$sess" "$nome" "$col" "$rig"
     if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$sess"; fi
     exec tmux attach -t "=$sess"
