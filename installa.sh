@@ -17,9 +17,10 @@ install -m 755 "$QUI/lavori-ore" /usr/local/bin/lavori-ore
 install -m 755 "$QUI/lavori-barra" /usr/local/bin/lavori-barra
 install -m 755 "$QUI/lavori-risposte" /usr/local/bin/lavori-risposte
 install -m 755 "$QUI/iacopo" /usr/local/bin/iacopo
+install -m 755 "$QUI/lavori-guardia" /usr/local/bin/lavori-guardia
 command -v python3 >/dev/null || echo "Nota: manca python3, il pannello degli scambi (lavori-risposte) non partira'."
 mkdir -p /etc/lavori && chmod 700 /etc/lavori
-echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra, lavori-risposte, iacopo (indice in /etc/lavori/indice.tsv)."
+echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra, lavori-risposte, iacopo, lavori-guardia (indice in /etc/lavori/indice.tsv)."
 
 mkdir -p "$HOME/.claude"
 if [ -e "$HOME/.claude/avviso-tmux.sh" ] && ! cmp -s "$QUI/avviso-tmux.sh" "$HOME/.claude/avviso-tmux.sh"; then

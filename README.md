@@ -94,6 +94,7 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 | conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
 | barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte; ⚠ se lo schermo è piccolo per i pannelli) |
 | comando corto | `/usr/local/bin/iacopo` (`iacopo on` / `iacopo off`: scorciatoia di `lavori iacopo …`) |
+| guardia | `/usr/local/bin/lavori-guardia` (sessioni rimaste staccate; stato in `/etc/lavori/guardia/<nome>`) |
 | pannello scambi | `/usr/local/bin/lavori-risposte` (gli scambi tu ↔ Claude in un pannello a parte; serve `python3`) |
 | indice | `/etc/lavori/indice.tsv` (nome, sessione tmux, cartella, creato, ultimo uso, descrizione); a ogni modifica copia in `indice.tsv.prima`, scrittura su file temporaneo, blocco con `flock` |
 | registro | `/var/log/lavori.log` (aperture, creazioni, rimozioni) |
@@ -172,6 +173,30 @@ C'è anche il comando corto, senza `lavori` davanti: `iacopo on`, `iacopo off`, 
 Al posto di `lavori iacopo` vanno bene anche `lavori stile`, `lavori styl` e `lavori iacopostyle`. Lo stato resta salvato in
 `/etc/lavori/stile`.
 
+### Guardia: le sessioni dimenticate aperte (facoltativo)
+Se cade l'SSH e non ti ricolleghi, la sessione resta aperta con Claude dentro e nessuno te lo dice. La guardia
+guarda proprio questo: le sessioni **staccate**, cioè aperte ma senza nessun terminale collegato.
+
+```
+lavori-guardia          # a mano: elenco delle sessioni staccate (guarda e basta)
+lavori-guardia giro     # il giro di controllo, da far girare con cron
+```
+
+Per farla girare da sola ogni 15 minuti, crea `/etc/cron.d/lavori-guardia`:
+
+```
+*/15 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1
+```
+
+Come si comporta il giro: la prima volta che vede una sessione staccata se la segna e aspetta (può essere uno
+stacco di un attimo); se al giro dopo è ancora staccata manda il **primo avviso**, poi ricorda **ogni ora per le
+prime 4 ore** e **ogni 4 ore** dopo. Quando ti ricolleghi o la chiudi dimentica tutto; se non c'è niente di
+staccato sta zitta. Non chiude mai niente da sola.
+
+Gli avvisi partono con il comando che metti in `LAVORI_AVVISA` (riceve il testo come ultimo argomento: lì
+agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `avvisa` usa quello; se non c'è
+niente, stampa il testo.
+
 ### Barra di stato tmux (facoltativo)
 Per avere in basso ⏱ tempo, 🪙 token, ● sessioni aperte e lo stato dell'iacopostyle, aggiungi al tuo `~/.tmux.conf`:
 ```tmux
@@ -212,8 +237,6 @@ Proprio perché è uno strumento potente (sessioni aperte come root), queste agg
 dimenticarsele aperte**:
 
 - **🪙 conta-token per lavoro**: comando che somma i token dai transcript di ogni progetto (oltre al totale già in barra).
-- **Guardia** (cron): controlla le sessioni aperte; se ne resti **staccato** la segnala su un **bot** (es. Telegram) e
-  ricorda di chiudere (prime 4 ore ogni ora, poi ogni 4 ore). Quando non c'è niente di aperto, sta zitta.
 - **Segnala + conferma**: aprendo un lavoro mentre un altro è ancora aperto, avvisa e chiede conferma.
 - **"chiudi tutto" dal bot**: un comando per **chiudere tutte le sessioni da remoto** (dal telefono, via bot) se le
   hai lasciate aperte — la rete di sicurezza di uno strumento che altrimenti ti lascia tutto acceso.

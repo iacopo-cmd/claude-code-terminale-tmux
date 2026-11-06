@@ -1,0 +1,106 @@
+#!/bin/bash
+# lavori-guardia - guarda le sessioni dei lavori aperte e segnala quelle rimaste STACCATE, cioe' aperte
+# (con Claude dentro) ma senza nessun terminale collegato: tipico quando cade l'SSH e non ci si ricollega.
+#
+# Uso:  lavori-guardia          elenco delle sessioni staccate, a mano (guarda e basta)
+#       lavori-guardia giro     il giro di controllo, per cron ogni 15 minuti: tiene il conto e manda gli avvisi
+#
+# Il giro: la prima volta che vede una sessione staccata se la segna e aspetta (puo' essere uno stacco di
+# un attimo). Se al giro dopo e' ancora staccata manda il primo avviso; poi ricorda ogni ora per le prime
+# 4 ore e ogni 4 ore dopo. Quando ti ricolleghi o la chiudi, dimentica tutto. Se non c'e' niente di
+# staccato sta zitta. Non chiude mai niente da sola.
+#
+# Avvisi: usa il comando "avvisa" se c'e' (avvisa -f lavori-guardia -l allarme ...), oppure il comando che
+# metti in LAVORI_AVVISA (riceve il testo come ultimo argomento); se non c'e' nessuno dei due, stampa.
+# Stato:  /etc/lavori/guardia/<nome>  (da quando e' staccata, ora dell'ultimo avviso, quanti avvisi)
+# Cron:   */15 * * * * root /usr/local/bin/lavori-guardia giro >/dev/null 2>&1
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+DIR=${LAVORI_DIR:-/etc/lavori}
+IDX=$DIR/indice.tsv
+STATO=$DIR/guardia
+REGISTRO=${LAVORI_REGISTRO:-/var/log/lavori.log}
+ATTESA=600            # secondi da staccata prima del primo avviso (= almeno un giro di cron)
+ORA=3600; QUATTRO=14400
+
+registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
+durata() { local d=${1:-0}; [ "$d" -lt 0 ] && d=0
+  if [ "$d" -ge 3600 ]; then printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)); else printf '%dm' $((d/60)); fi; }
+# legge lo stato di un lavoro in: da (staccata da), ultimo (ultimo avviso), avvisi (quanti)
+leggi_stato() { da=0; ultimo=0; avvisi=0; local k v
+  while IFS='=' read -r k v; do
+    [[ "$v" =~ ^[0-9]+$ ]] || continue
+    case "$k" in staccata_da) da=$v ;; ultimo_avviso) ultimo=$v ;; avvisi) avvisi=$v ;; esac
+  done < <(cat "$STATO/$1" 2>/dev/null); }
+scrivi_stato() { printf 'staccata_da=%s\nultimo_avviso=%s\navvisi=%s\n' "$da" "$ultimo" "$avvisi" > "$STATO/$1"; }
+manda() {   # manda <testo> <chiave>
+  if [ -n "${LAVORI_AVVISA:-}" ]; then $LAVORI_AVVISA "$1"
+  elif command -v avvisa >/dev/null; then avvisa -f lavori-guardia -l allarme -k "$2" -w 30 "$1"
+  else printf '%s\n' "$1"; fi; }
+
+# --- guarda: riempie gli elenchi delle sessioni aperte e di quelle staccate
+adesso=$(date +%s); aperte=0; STACCATE=()      # ogni voce: nome<TAB>sessione<TAB>creata<TAB>ultimo collegamento
+while IFS=$'\t' read -r nome sess resto; do
+  case "$nome" in ''|'#'*) continue ;; esac
+  dati=$(tmux display-message -p -t "=$sess:" '#{session_attached} #{session_created} #{session_last_attached}' 2>/dev/null) || continue
+  read -r collegati creata ultcol <<< "$dati"
+  [[ "${collegati:-}" =~ ^[0-9]+$ ]] || continue
+  aperte=$((aperte+1))
+  [ "$collegati" -eq 0 ] && STACCATE+=("$nome"$'\t'"$sess"$'\t'"${creata:-0}"$'\t'"${ultcol:-0}")
+done < <(cat "$IDX" 2>/dev/null)
+
+case "${1:-}" in
+giro)
+  mkdir -p "$STATO" 2>/dev/null && chmod 700 "$STATO" || exit 1
+  exec 8>"$STATO/.blocco"; flock -n 8 || exit 0          # un giro alla volta
+  ancora=" "
+  for voce in "${STACCATE[@]}"; do
+    IFS=$'\t' read -r nome sess creata ultcol <<< "$voce"
+    ancora+="$nome "
+    if [ ! -e "$STATO/$nome" ]; then                     # appena vista staccata: me la segno e aspetto
+      da=$adesso; ultimo=0; avvisi=0; scrivi_stato "$nome"
+      registra "guardia: $nome staccata (sessione $sess), la tengo d'occhio"
+      continue
+    fi
+    leggi_stato "$nome"; [ "$da" -gt 0 ] || da=$adesso
+    eta=$((adesso-da))
+    if [ "$ultimo" -eq 0 ]; then [ "$eta" -ge "$ATTESA" ] || continue          # primo avviso
+    else
+      [ "$eta" -lt $((QUATTRO+ORA)) ] && ogni=$ORA || ogni=$QUATTRO            # ogni ora, poi ogni 4 ore
+      [ $((adesso-ultimo)) -ge $((ogni-120)) ] || continue
+    fi
+    avvisi=$((avvisi+1)); ultimo=$adesso; scrivi_stato "$nome"
+    testo="🖥 Lavori: la sessione \"$nome\" e' aperta ma nessuno e' collegato da almeno $(durata "$eta")"
+    [[ "$creata" =~ ^[0-9]+$ ]] && [ "$creata" -gt 0 ] && testo+=" (aperta da $(durata $((adesso-creata))))"
+    testo+=". Claude sta ancora girando. Per rientrare: lavori $nome — se non ti serve, rientra e chiudila. (avviso n. $avvisi)"
+    manda "$testo" "lavori-guardia-$nome"
+    registra "guardia: avviso n. $avvisi per $nome (staccata da $(durata "$eta"))"
+  done
+  for f in "$STATO"/*; do                                # ricollegata o chiusa: dimentico
+    [ -f "$f" ] || continue; n=${f##*/}
+    [[ "$ancora" == *" $n "* ]] && continue
+    rm -f "$f"; registra "guardia: $n non e' piu' staccata, dimentico"
+  done
+  ;;
+"")
+  if [ "$aperte" -eq 0 ]; then
+    echo "Guardia: nessuna sessione aperta."
+  elif [ "${#STACCATE[@]}" -eq 0 ]; then
+    echo "Guardia: nessuna sessione staccata (aperte: $aperte, tutte con qualcuno collegato)."
+  else
+    [ "${#STACCATE[@]}" -eq 1 ] && quante="1 sessione staccata" || quante="${#STACCATE[@]} sessioni staccate"
+    echo "Guardia: $quante su $aperte aperte — Claude gira ma nessuno e' collegato:"
+    for voce in "${STACCATE[@]}"; do
+      IFS=$'\t' read -r nome sess creata ultcol <<< "$voce"
+      riga="  ● $nome"; [ "$sess" != "$nome" ] && riga+=" (sessione $sess)"
+      [[ "$creata" =~ ^[0-9]+$ ]] && [ "$creata" -gt 0 ] && riga+=" — aperta da $(durata $((adesso-creata)))"
+      if [[ "$ultcol" =~ ^[0-9]+$ ]] && [ "$ultcol" -gt 0 ]; then riga+=", ultimo collegamento $(durata $((adesso-ultcol))) fa"
+      else riga+=", mai collegata"; fi
+      if [ -e "$STATO/$nome" ]; then leggi_stato "$nome"
+        riga+="; la guardia la vede staccata da $(durata $((adesso-da))), avvisi mandati: $avvisi"; fi
+      echo "$riga"
+    done
+    echo "Per rientrare: lavori <nome>   Per chiuderla: rientra ed esci da Claude."
+  fi
+  ;;
+*) echo "uso: lavori-guardia [giro]" >&2; exit 1 ;;
+esac
