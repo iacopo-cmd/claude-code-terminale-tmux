@@ -202,3 +202,8 @@ dimenticarsele aperte**:
 ## Licenza
 
 MIT. Nessuna garanzia: lo usi a tuo rischio (vedi le avvertenze qui sopra).
+
+---
+
+✎ **Terminale personalizzato da Iacopo · 6 novembre 2026** — la stessa firma compare nella barra in basso di ogni
+lavoro, accanto al nome della sessione (`LAVORI_FIRMA=""` la toglie).
