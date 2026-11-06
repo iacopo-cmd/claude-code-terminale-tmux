@@ -7,8 +7,8 @@
 #   senza argomenti: dentro tmux usa il nome della sessione, altrimenti la cartella corrente
 #   --stampa: stampa quello che c'e' ed esce (senza restare in ascolto)
 # Prova a mano, dentro la sessione di un lavoro:
-#   tmux split-window -hb -d -l 60% lavori-risposte
-# "lavori <nome>" lo apre da solo a sinistra se lo schermo e' largo; quando Claude si chiude e questo
+#   tmux split-window -h -d -l 60% lavori-risposte
+# "lavori <nome>" lo apre da solo a destra se lo schermo e' largo; quando Claude si chiude e questo
 # pannello resta l'unico della finestra, esce (cosi' la sessione tmux non resta appesa).
 import datetime, glob, json, os, re, shutil, subprocess, sys, textwrap, time
 
