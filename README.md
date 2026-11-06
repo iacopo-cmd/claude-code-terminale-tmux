@@ -146,7 +146,7 @@ di almeno 120 colonne e 26 righe; se è più basso apre di fianco come la guida 
 A mano, in una sessione già aperta (dal pannello di Claude Code):
 
 ```
-tmux split-window -vb -d -l 55% 'lavori-risposte --claude'
+tmux split-window -vb -d -l 40% 'lavori-risposte --claude'
 tmux split-window -h  -d -l 48% 'lavori-risposte --tu'
 ```
 - A mano, in una sessione già aperta: `tmux split-window -h -d -l 60% lavori-risposte`

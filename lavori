@@ -254,7 +254,7 @@ apri() {
         local lato=-h g; g=$(guida_scelta)
         if [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
             # plancia: sopra le risposte di Claude; sotto Claude Code a sinistra, a destra le tue battute + le sue domande
-            tmux split-window -vb -d -l 55% -t "=$sess:" "lavori-risposte '$nome' --claude" 2>/dev/null || true
+            tmux split-window -vb -d -l 40% -t "=$sess:" "lavori-risposte '$nome' --claude" 2>/dev/null || true
             tmux split-window -h  -d -l 48% -t "=$sess:" "lavori-risposte '$nome' --tu" 2>/dev/null || true
         else
             # di fianco. europea: scambi a destra; inglese/egiziana: a sinistra (plancia su schermo basso: come europea)
