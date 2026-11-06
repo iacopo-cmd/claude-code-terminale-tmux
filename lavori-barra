@@ -33,4 +33,5 @@ fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 out+=" · ● $na aperte"
+out="${out# · }"      # niente separatore iniziale se manca il tempo (sessione non in corso)
 printf ' %s ' "$out"
