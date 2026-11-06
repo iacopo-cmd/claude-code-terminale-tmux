@@ -138,7 +138,7 @@ info() {
 nuovo() {
     local nome=${1:-} cart=${2:-} descr=${3:-}
     [ -n "$nome" ] && [ -n "$cart" ] || errore "uso: lavori nuovo <nome> <cartella> [\"descrizione\"]"
-    [[ "$nome" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]] || errore "nome non valido: minuscole, numeri, - e _ (max 24), es. sito-casa"
+    [[ "$nome" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$ ]] || errore "nome non valido: lettere (anche MAIUSCOLE), numeri, - e _ (max 24), es. Sito-Casa"
     [[ "$RISERVATI" == *" $nome "* ]] && errore "nome riservato: $nome"
     esiste "$nome" && errore "esiste gia': $nome -> $(campo "$nome" 3)"
     [[ "$descr" == *$'\t'* || "$descr" == *$'\n'* ]] && errore "la descrizione non puo' contenere tabulazioni o a capo"
@@ -241,24 +241,34 @@ stampa_menu() {
     echo "  [numero] apri · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
 }
 
+# descrizione -> nome proposto in CamelCase ("my admin telegram bot" -> "MyAdminTelegramBot"), max 24
+_nome_da_descrizione() {
+    printf '%s' "$1" | sed 's/[^A-Za-z0-9]\+/ /g' \
+      | awk '{o="";for(i=1;i<=NF;i++)o=o toupper(substr($i,1,1)) substr($i,2); print substr(o,1,24)}'
+}
+
 chiedi_nuovo() {
-    local nome cart descr base r
+    local nome cart descr base r proposta
     echo
     echo "  ── Nuovo lavoro ──"
+    read -r -p "  Descrizione (a cosa serve, in una riga; vuoto = annulla): " descr || return
+    [ -z "$descr" ] && { echo "  Annullato."; return; }
+    proposta=$(_nome_da_descrizione "$descr")
+    # il nome proposto esce gia' scritto nel campo: con le FRECCE lo correggi/accorci, Invio conferma
     while :; do
-        read -r -p "  Nome corto (minuscole, es. sito-casa; vuoto = annulla): " nome || return
-        [ -z "$nome" ] && return
-        if ! [[ "$nome" =~ ^[a-z0-9][a-z0-9_-]{0,23}$ ]]; then echo "  Solo minuscole, numeri, - e _ (max 24)."; continue; fi
-        if [[ "$RISERVATI" == *" $nome "* ]]; then echo "  \"$nome\" è una parola riservata, scegline un'altra."; continue; fi
+        read -e -r -i "$proposta" -p "  Nome del lavoro (frecce per correggere/accorciare, Invio = ok): " nome || return
+        nome=${nome// /}
+        [ -z "$nome" ] && { echo "  Serve un nome."; continue; }
+        if ! [[ "$nome" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$ ]]; then echo "  Solo lettere, numeri, - e _ (max 24), niente spazi."; continue; fi
+        if [[ "$RISERVATI" == *" $nome "* ]]; then echo "  \"$nome\" è riservato, scegline un altro."; continue; fi
         if esiste "$nome"; then echo "  Esiste già: $nome -> $(campo "$nome" 3)"; continue; fi
         break
     done
     if [ -d /Progetti ]; then base=/Progetti; else base=$HOME/lavori; fi
-    read -r -p "  Cartella [$base/$nome]: " cart || return
+    read -e -r -i "$base/$nome" -p "  Cartella (frecce per correggere): " cart || return
     cart=${cart:-$base/$nome}
-    read -r -p "  Descrizione in una riga (a cosa serve): " descr || return
     echo
-    echo "  Creo: $nome -> $cart${descr:+ — $descr}"
+    echo "  Creo: $nome -> $cart — $descr"
     read -r -p "  Confermi? [S/n] " r || return
     [[ "$r" =~ ^[nN] ]] && { echo "  Annullato."; return; }
     ( nuovo "$nome" "$cart" "$descr" ) || return
