@@ -1,7 +1,17 @@
 #!/bin/bash
 # iacopo - comando corto per l'interruttore dell'iacopostyle (firma + pannelli degli scambi):
-#   iacopo on    accende su tutte le sessioni, aperte e nuove
+#   iacopo on    accende su tutte le sessioni, aperte e nuove, con la guida TORRE (3 fasce orizzontali:
+#                domande in sospeso, tue battute, Claude Code in basso)
 #   iacopo off   spegne: Claude Code da solo
 #   iacopo       dice com'e' adesso
-# E' solo una scorciatoia di "lavori iacopo ...".
+# La versione di prima, coi 2 blocchi affiancati sotto (guida plancia): iacopo2 on
+# Scorciatoia di "lavori guida ..." + "lavori iacopo ...".
+GUIDA=torre
+case "$(basename "$0")" in iacopo2) GUIDA=plancia ;; esac
+if [ "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" = on ]; then
+    lavori guida "$GUIDA" >/dev/null || exit 1
+    lavori iacopo off >/dev/null 2>&1          # rimonta i pannelli anche nelle sessioni gia' aperte
+    lavori iacopo on && echo "Guida: $GUIDA."
+    exit
+fi
 exec lavori iacopo "$@"

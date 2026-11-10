@@ -17,6 +17,7 @@ install -m 755 "$QUI/lavori-ore" /usr/local/bin/lavori-ore
 install -m 755 "$QUI/lavori-barra" /usr/local/bin/lavori-barra
 install -m 755 "$QUI/lavori-risposte" /usr/local/bin/lavori-risposte
 install -m 755 "$QUI/iacopo" /usr/local/bin/iacopo
+install -m 755 "$QUI/iacopo2" /usr/local/bin/iacopo2
 install -m 755 "$QUI/lavori-guardia" /usr/local/bin/lavori-guardia
 command -v python3 >/dev/null || echo "Nota: manca python3, il pannello degli scambi (lavori-risposte) non partira'."
 mkdir -p /etc/lavori && chmod 700 /etc/lavori
