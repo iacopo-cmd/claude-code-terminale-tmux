@@ -222,21 +222,22 @@ togli() {
     echo "Tolto. Per rimetterlo: lavori nuovo $nome $cart"
 }
 
-guida_scelta() { local g; g=$(head -1 "$DIR/guida" 2>/dev/null); case "$g" in inglese|egiziana|plancia) echo "$g" ;; *) echo europea ;; esac; }
+guida_scelta() { local g; g=$(head -1 "$DIR/guida" 2>/dev/null); case "$g" in inglese|egiziana|plancia|torre) echo "$g" ;; *) echo europea ;; esac; }
 guida_frase() { case "$1" in
     europea) echo "Guida europea: scrivi a sinistra, gli scambi con Claude stanno a destra." ;;
-    plancia) echo "Guida plancia: sopra le risposte di Claude; sotto scrivi a sinistra, a destra le tue battute e le domande di Claude." ;;
+    torre)   echo "Guida torre: tre fasce una sopra l'altra: in alto le domande in sospeso, in mezzo le tue battute e le domande, in basso Claude Code largo tutto lo schermo." ;;
+    plancia) echo "Guida plancia: sopra le domande di Claude in sospeso; sotto scrivi a sinistra, a destra le tue battute e le domande di Claude." ;;
     *)       echo "Guida $1: scrivi a destra, gli scambi con Claude stanno a sinistra." ;; esac; }
 guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pannelli attorno a Claude Code
     local g; g=$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')
     case "$g" in
-        "") guida_frase "$(guida_scelta)"; echo "Per cambiare: lavori guida europea | inglese | egiziana | plancia"; return ;;
-        europea|inglese|egiziana|plancia) ;;
-        *) errore "guida sconosciuta: $1 (europea, inglese, egiziana o plancia)" ;;
+        "") guida_frase "$(guida_scelta)"; echo "Per cambiare: lavori guida europea | inglese | egiziana | plancia | torre"; return ;;
+        europea|inglese|egiziana|plancia|torre) ;;
+        *) errore "guida sconosciuta: $1 (europea, inglese, egiziana, plancia o torre)" ;;
     esac
     printf '%s\n' "$g" > "$DIR/guida" || errore "non riesco a scrivere $DIR/guida"
     registra "guida $g"
-    guida_frase "$g"; echo "Vale dalla prossima apertura di un lavoro (le sessioni gia' aperte restano come sono)."
+    guida_frase "$g"; echo "Vale dalla prossima apertura di un lavoro; per le sessioni gia' aperte: iacopo off e poi iacopo on."
 }
 
 # --- Iacopostyle: i pannelli degli scambi attorno a Claude Code. Interruttore: iacopo on|off (la barra resta sempre)
@@ -257,9 +258,17 @@ vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette i p
     [ -z "$(_pannelli_scambi "$sess")" ] || return 0
     p=$(_pannello_claude "$sess"); [ -n "$p" ] || return 0
     g=$(guida_scelta)
-    if [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
+    if [ "$g" = torre ] && [ "$rig" -ge 26 ]; then
+        # torre (2026-11-10): tre fasce una sopra l'altra, larghe tutto lo schermo, simile a Claude Code da solo:
+        # in alto le domande in sospeso, in mezzo le tue battute + le sue domande, in basso Claude Code (si scrive in fondo)
+        local t sopra=${LAVORI_TORRE_SOPRA:-5} tu=${LAVORI_TORRE_TU:-8}      # righe: domande in sospeso, tue battute
+        t=$(tmux split-window -vb -d -P -F '#{pane_id}' -l $((sopra + tu + 1)) -t "$p" "lavori-risposte '$nome' --tu" 2>/dev/null) || true
+        [ -n "$t" ] && tmux split-window -vb -d -l "$sopra" -t "$t" "lavori-risposte '$nome' --sospese" 2>/dev/null || true
+    elif [ "$g" = plancia ] && [ "$rig" -ge 26 ]; then
         # plancia: sopra le risposte di Claude; sotto Claude Code a sinistra, a destra le tue battute + le sue domande
-        tmux split-window -vb -d -l 40% -t "$p" "lavori-risposte '$nome' --claude" 2>/dev/null || true
+        # 2026-11-10: sopra NON piu' le risposte di Claude (doppione di Claude Code) ma le DOMANDE IN SOSPESO (⏳ ?).
+        # Per riavere le risposte sopra: LAVORI_SOPRA=claude
+        tmux split-window -vb -d -l "${LAVORI_SOPRA_ALTEZZA:-30%}" -t "$p" "lavori-risposte '$nome' --${LAVORI_SOPRA:-sospese}" 2>/dev/null || true
         tmux split-window -h  -d -l 48% -t "$p" "lavori-risposte '$nome' --tu" 2>/dev/null || true
     else
         # di fianco. europea: scambi a destra; inglese/egiziana: a sinistra (plancia su schermo basso: come europea)

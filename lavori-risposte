@@ -3,7 +3,9 @@
 # senza tool e senza codice, seguendo dal vivo il transcript (.jsonl) del lavoro. Pensato per stare in
 # un pannello tmux sopra a Claude Code: sotto scorre il codice, qui il discorso resta fermo.
 #
-# Uso:  lavori-risposte [nome-lavoro | cartella] [--tu | --claude] [--stampa]
+# Uso:  lavori-risposte [nome-lavoro | cartella] [--tu | --claude | --sospese] [--stampa]
+#   --sospese (2026-11-10): solo le DOMANDE di Claude ancora SENZA risposta, con la clessidra (⏳ ?). Il pannello si
+#   ridisegna da solo: quando rispondi le domande passano sotto, spente, con la tua risposta (✔). Niente altro.
 #   --tu: solo le tue battute        --claude: solo le risposte di Claude   (per tenerle in due pannelli)
 #   con --tu compaiono anche le DOMANDE che Claude ti fa (frasi che finiscono con "?" e le domande a scelta),
 #   in fila tra le tue battute: cosi' vedi cosa aspetta risposta e cosa hai risposto.
@@ -133,11 +135,60 @@ def a_capo(testo, largh):
 
 
 ultimo_chi = None
-SOLO = 'tu' if '--tu' in sys.argv[1:] else 'claude' if '--claude' in sys.argv[1:] else None
+SOLO = ('tu' if '--tu' in sys.argv[1:] else 'claude' if '--claude' in sys.argv[1:]
+        else 'sospese' if '--sospese' in sys.argv[1:] else None)
+SOSPESE, CHIUSE, DISEGNATO = [], [], [None]     # --sospese: (ora, domanda) in attesa; (ora, domanda, risposta) chiuse
+
+
+def sospese(o):
+    """--sospese: tiene il conto delle domande aperte. Una battuta tua le chiude tutte (e' la risposta)."""
+    d = domande_di(o)
+    if d:
+        SOSPESE.extend((ora(o), x) for x in d)
+        return
+    r = testo_di(o)
+    if r and r[0] == 'tu' and SOSPESE:
+        risposta = ' '.join(r[1].split())
+        CHIUSE.extend((h, q, risposta) for h, q in SOSPESE)
+        del SOSPESE[:], CHIUSE[:-12]
+
+
+def disegna():
+    """--sospese: ridisegna il pannello (solo se e' cambiato qualcosa o la misura)"""
+    dim = shutil.get_terminal_size((100, 12))
+    stato = (len(SOSPESE), len(CHIUSE), CHIUSE[-1:] , dim.columns, dim.lines)
+    if stato == DISEGNATO[0]:
+        return
+    DISEGNATO[0] = stato
+    largh = max(20, dim.columns - 6)
+    out = []
+    if SOSPESE:
+        out.append(C('1;35', f'⏳ DOMANDE IN SOSPESO  {len(SOSPESE)}') + C('2', '   (rispondi sotto)'))
+        for h, q in SOSPESE:
+            righe = a_capo(q, largh).split('\n')
+            out.append(C('1;35', '⏳ ? ') + C('35', righe[0]) + C('2', f'  {h}'))
+            out.extend(C('35', '     ' + r) for r in righe[1:])
+    else:
+        out.append(C('1;32', '✔ nessuna domanda in sospeso'))
+    liberi = dim.lines - len(out) - 2
+    if CHIUSE and liberi >= 2:
+        out.append('')
+        out.append(C('2', '── gia\' risposte ──'))
+        for h, q, risp in reversed(CHIUSE[-max(1, (liberi - 1) // 2):]):
+            out.append(C('2', '✔ ? ' + textwrap.shorten(q, largh, placeholder='…')))
+            out.append(C('2;33', '     ▶ ' + textwrap.shorten(risp, largh - 2, placeholder='…')))
+    if not sys.stdout.isatty():
+        print('\n'.join(out), flush=True)
+        return
+    sys.stdout.write('\033[2J\033[H' + '\n'.join(out[:max(1, dim.lines - 1)]))
+    sys.stdout.flush()
 
 
 def stampa(o):
     global ultimo_chi
+    if SOLO == 'sospese':
+        sospese(o)
+        return
     if SOLO == 'tu':
         domande = domande_di(o)
         if domande:
@@ -220,12 +271,15 @@ def main():
                     f.close()
                     print('\n' + C('2', '─── nuova conversazione ───'))
                 corrente, resto = nuovo, ''
+                del SOSPESE[:], CHIUSE[:]
                 f = open(corrente, encoding='utf-8', errors='replace')
             elif not nuovo and not avvisato and not una_volta:
                 print(C('2', f'in attesa della prima conversazione in {cart} ...'), flush=True)
                 avvisato = True
         if f:
             resto = leggi(f, resto)
+        if SOLO == 'sospese':
+            disegna()
         if una_volta:
             break
         giro += 1
