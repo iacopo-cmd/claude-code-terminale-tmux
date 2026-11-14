@@ -1,13 +1,17 @@
 #!/bin/bash
-# lavori-barra - contenuto della barra di stato tmux (in basso). Monitora, per default tutto acceso:
-#   ⏱ tempo trascorso della sessione · 🪙 token della conversazione corrente · ● sessioni aperte
-#   · iacopostyle on|off (l'interruttore di firma e pannelli: lavori iacopo on|off)
+# lavori-barra - contenuto della barra di stato tmux (in basso), tutto su UNA riga, per default tutto acceso:
+#   MACCHINA (nome host e indirizzo) · ⏱ tempo trascorso della sessione · 🪙 token della conversazione corrente
+#   · ● sessioni aperte · ✎ come si accende/spegne l'iacopostyle e com'e' adesso · la firma
 #   e, solo quando serve, davanti a tutto: ⚠ metti a tutto schermo (il terminale e' piccolo per i pannelli)
-# Lo chiama tmux (status-right) col nome sessione:  #(lavori-barra #S)
+# Lo chiama tmux col nome sessione:  #(lavori-barra #S)      (nelle sessioni di "lavori" sta a sinistra, accanto
+# al nome: vedi la funzione "barra" in lavori).  Secondo argomento "senzafirma": toglie comando e firma.
+# Se la riga non entra nel terminale si accorcia da sola (via "aperte" e "per la mod:"); la firma non si tocca.
+# LAVORI_MACCHINA="testo" cambia la scritta della macchina, LAVORI_MACCHINA="" la toglie.
 # Spiegazione della leggenda: comando "aiuto".
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
+FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
 
 s=${1:-}; [ -n "$s" ] || exit 0
 nfmt(){ local n=${1:-0}
@@ -15,7 +19,7 @@ nfmt(){ local n=${1:-0}
   elif [ "$n" -ge 1000 ];    then printf '%dk' $((n/1000))
   else printf '%d' "$n"; fi; }
 
-out=""
+avviso=""
 stile=on; [ "$(head -1 "${LAVORI_DIR:-/etc/lavori}/stile" 2>/dev/null)" = off ] && stile=off   # lavori iacopo on|off
 # ⚠ schermo troppo piccolo per i pannelli (vedi "lavori guida"): lo dice qui, in italiano. Servono 120 colonne;
 #   la plancia vuole anche 26 righe di terminale (= 25 di finestra, una se la prende questa barra).
@@ -23,28 +27,47 @@ read -r larg alt < <(tmux display-message -p -t "=$s:" '#{window_width} #{window
 if [ "$stile" = on ] && [[ "${larg:-}" =~ ^[0-9]+$ && "${alt:-}" =~ ^[0-9]+$ ]]; then
   minalt=0; [ "$(head -1 "${LAVORI_DIR:-/etc/lavori}/guida" 2>/dev/null)" = plancia ] && minalt=25
   if [ "$larg" -lt 120 ] || [ "$alt" -lt "$minalt" ]; then
-    out+="⚠ metti a tutto schermo (ora ${larg}x$((alt+1)))"
+    avviso="⚠ metti a tutto schermo (ora ${larg}x$((alt+1)))"
   fi
 fi
+# la MACCHINA: nome host e indirizzo, per non sbagliare macchina quando se ne hanno piu' d'una aperta
+if [ -z "${LAVORI_MACCHINA+x}" ]; then
+  ind=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+  mac="$(hostname)${ind:+ $ind}"
+else mac=$LAVORI_MACCHINA; fi
 # ⏱ tempo trascorso della sessione
+tempo=""
 creato=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>/dev/null | awk -v n="$s" '$1==n{print $2; exit}')
 if [ -n "$creato" ]; then
   d=$(( $(date +%s) - creato )); [ "$d" -lt 0 ] && d=0
-  out+=" · ⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
+  tempo="⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
 fi
 # 🪙 token della conversazione corrente (ultimo .jsonl della cartella del lavoro di questa sessione)
+gettoni=""
 cart=$(awk -F'\t' -v n="$s" '!/^#/ && $2==n{print $3; exit}' "$IDX" 2>/dev/null)
 if [ -n "$cart" ]; then
   key=$(printf '%s' "$cart" | sed 's/[^A-Za-z0-9]/-/g')
   f=$(ls -t "$PROG/$key"/*.jsonl 2>/dev/null | head -1)
   if [ -n "$f" ]; then
     tok=$(grep -hoE '"(input_tokens|output_tokens)":[0-9]+' "$f" 2>/dev/null | grep -oE '[0-9]+' | awk '{s+=$1} END{printf "%d", s+0}')
-    out+=" · 🪙 $(nfmt "$tok")"
+    gettoni="🪙 $(nfmt "$tok")"
   fi
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
-out+=" · ● $na aperte"
-out+=" · iacopostyle $stile"
-out="${out# · }"      # niente separatore iniziale se manca il tempo (sessione non in corso)
-printf ' %s ' "$out"
+
+# la riga, in due misure: larga, e stretta se la larga non entra nel terminale
+riga(){   # riga <larga|stretta>
+  local o="" p
+  for p in "$avviso" "$mac" "$tempo" "$gettoni"; do [ -n "$p" ] && o+=" · $p"; done
+  if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
+  if [ "${2:-}" != senzafirma ]; then
+    if [ "$1" = larga ]; then o+=" · ✎ per la mod: iacopo off | on (ora $stile)"; else o+=" · ✎ iacopo off | on (ora $stile)"; fi
+    o+=" · $FIRMA"
+  else o+=" · iacopostyle $stile"; fi
+  printf '%s' "${o# · }"
+}
+out=$(riga larga "${2:-}")
+# spazio a disposizione: larghezza del terminale meno "[nome sessione] " e un margine
+if [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( ${#out} + ${#s} + 6 )) -gt "$larg" ]; then out=$(riga stretta "${2:-}"); fi
+printf '%s ' "$out"

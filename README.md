@@ -92,7 +92,7 @@ conversazione verificato; avviso se esiste già una sessione tmux con quel nome 
 |---|---|
 | comando | `/usr/local/bin/lavori` |
 | conta-ore | `/usr/local/bin/lavori-ore` (inizio/fine di ogni sessione, totali); dati in `/etc/lavori/ore/<nome>.tsv` |
-| barra tmux | `/usr/local/bin/lavori-barra` (contenuto della barra: ⏱ tempo · 🪙 token · ● sessioni aperte; ⚠ se lo schermo è piccolo per i pannelli) |
+| barra tmux | `/usr/local/bin/lavori-barra` (la riga della barra: macchina · ⏱ tempo · 🪙 token · ● sessioni aperte · comando della mod · firma; ⚠ se lo schermo è piccolo per i pannelli) |
 | comando corto | `/usr/local/bin/iacopo` (`iacopo on` / `iacopo off`: scorciatoia di `lavori iacopo …`) |
 | guardia | `/usr/local/bin/lavori-guardia` (sessioni rimaste staccate; stato in `/etc/lavori/guardia/<nome>`) |
 | pannello scambi | `/usr/local/bin/lavori-risposte` (gli scambi tu ↔ Claude in un pannello a parte; serve `python3`) |
@@ -201,17 +201,31 @@ Gli avvisi partono con il comando che metti in `LAVORI_AVVISA` (riceve il testo 
 agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `avvisa` usa quello; se non c'è
 niente, stampa il testo.
 
-### Barra di stato tmux (facoltativo)
-Per avere in basso ⏱ tempo, 🪙 token, ● sessioni aperte e lo stato dell'iacopostyle, aggiungi al tuo `~/.tmux.conf`:
+### Barra di stato tmux
+Nelle sessioni aperte con `lavori` la barra in basso è tutta su **una riga**, a sinistra accanto al nome della
+sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
+
+```
+[MioLavoro] mioserver 203.0.113.10 · ⏱ 0h23m · 🪙 367k · ● 2 aperte · ✎ per la mod: iacopo off | on (ora on) · Iacopo, 6 novembre 2026
+```
+
+- **la macchina**: nome host e indirizzo, per non sbagliare macchina quando ne hai più d'una aperta
+  (`LAVORI_MACCHINA="testo"` la cambia, `LAVORI_MACCHINA=""` la toglie);
+- ⏱ tempo della sessione · 🪙 token della conversazione corrente · ● sessioni aperte;
+- il comando della mod con lo stato di adesso, e la firma.
+
+Se il terminale è stretto la riga si accorcia da sola (via «aperte» e «per la mod:»); la firma non si tocca. Quando
+il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida `plancia`),
+davanti a tutto compare `⚠ metti a tutto schermo (ora 100x25)`; sparisce da solo quando lo allarghi.
+
+Per le sessioni tmux che **non** apri con `lavori` puoi avere la stessa riga aggiungendo al tuo `~/.tmux.conf`:
 ```tmux
 set -g status on
 set -g status-interval 15
-set -g status-right-length 90
-set -g status-right ' #S  #(/usr/local/bin/lavori-barra #S)'
+set -g status-left-length 220
+set -g status-left '[#S] #(/usr/local/bin/lavori-barra #S)'
+set -g status-right ''
 ```
-
-Quando il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida
-`plancia`), davanti a tutto compare `⚠ metti a tutto schermo (ora 100x25)`; sparisce da solo quando lo allarghi.
 
 Si possono cambiare con le variabili `LAVORI_DIR`, `LAVORI_REGISTRO`, `CLAUDE_BIN`, `PROGETTI_CLAUDE`.
 
