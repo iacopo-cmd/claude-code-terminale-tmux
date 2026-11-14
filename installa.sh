@@ -5,23 +5,26 @@ set -euo pipefail
 for c in tmux flock awk; do command -v "$c" >/dev/null || { echo "Manca: $c"; exit 1; }; done
 QUI="$(cd "$(dirname "$0")" && pwd)"
 
-if [ -e /usr/local/bin/lavori ] && ! cmp -s "$QUI/lavori" /usr/local/bin/lavori; then
-    cp -p /usr/local/bin/lavori "/usr/local/bin/lavori.prima-$(date +%Y%m%d%H%M%S)"
-    echo "Copia della versione precedente: /usr/local/bin/lavori.prima-*"
+# metti <file>: installa in /usr/local/bin; se la versione installata e' diversa, prima ne fa una copia .prima-DATA
+metti() {
+    local f=$1 dest=/usr/local/bin/$1
+    if [ -e "$dest" ] && ! cmp -s "$QUI/$f" "$dest"; then
+        cp -p "$dest" "$dest.prima-$(date +%Y%m%d%H%M%S)"; echo "Copia della versione precedente: $dest.prima-*"
+    fi
+    install -m 755 "$QUI/$f" "$dest"
+}
+for f in lavori lavori-ore lavori-barra lavori-risposte iacopo iacopo2; do metti "$f"; done
+# La guardia spesso si adatta alla macchina (avvisi col formato del server, nome macchina...): se quella installata
+# e' diversa dal repo NON la tocco, cosi' un aggiornamento non la rompe. Per sostituirla: LAVORI_GUARDIA_FORZA=1
+if [ -e /usr/local/bin/lavori-guardia ] && ! cmp -s "$QUI/lavori-guardia" /usr/local/bin/lavori-guardia \
+   && [ "${LAVORI_GUARDIA_FORZA:-0}" != 1 ]; then
+    echo "Guardia: lascio quella installata (e' diversa dal repo, adattata a questa macchina). Per sostituirla: LAVORI_GUARDIA_FORZA=1 ./installa.sh"
+else
+    metti lavori-guardia
 fi
-install -m 755 "$QUI/lavori" /usr/local/bin/lavori
-if [ -e /usr/local/bin/lavori-ore ] && ! cmp -s "$QUI/lavori-ore" /usr/local/bin/lavori-ore; then
-    cp -p /usr/local/bin/lavori-ore "/usr/local/bin/lavori-ore.prima-$(date +%Y%m%d%H%M%S)"
-fi
-install -m 755 "$QUI/lavori-ore" /usr/local/bin/lavori-ore
-install -m 755 "$QUI/lavori-barra" /usr/local/bin/lavori-barra
-install -m 755 "$QUI/lavori-risposte" /usr/local/bin/lavori-risposte
-install -m 755 "$QUI/iacopo" /usr/local/bin/iacopo
-install -m 755 "$QUI/iacopo2" /usr/local/bin/iacopo2
-install -m 755 "$QUI/lavori-guardia" /usr/local/bin/lavori-guardia
 command -v python3 >/dev/null || echo "Nota: manca python3, il pannello degli scambi (lavori-risposte) non partira'."
 mkdir -p /etc/lavori && chmod 700 /etc/lavori
-echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra, lavori-risposte, iacopo, lavori-guardia (indice in /etc/lavori/indice.tsv)."
+echo "Installato /usr/local/bin/lavori, lavori-ore, lavori-barra, lavori-risposte, iacopo, iacopo2, lavori-guardia (indice in /etc/lavori/indice.tsv)."
 
 mkdir -p "$HOME/.claude"
 if [ -e "$HOME/.claude/avviso-tmux.sh" ] && ! cmp -s "$QUI/avviso-tmux.sh" "$HOME/.claude/avviso-tmux.sh"; then
