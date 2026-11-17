@@ -175,6 +175,41 @@ C'è anche il comando corto, senza `lavori` davanti: `iacopo on`, `iacopo off`, 
 Al posto di `lavori iacopo` vanno bene anche `lavori stile`, `lavori styl` e `lavori iacopostyle`. Lo stato resta salvato in
 `/etc/lavori/stile`.
 
+### Lavoro zero «Aggiornamenti»: aggiornare senza farsi buttare fuori (Debian e Ubuntu)
+
+`lavori 0` apre un terminale di root dentro tmux, **senza Claude**, fatto apposta per gli aggiornamenti e i comandi
+lunghi. Se cade l'SSH l'aggiornamento continua; rientri con `lavori 0` e lo ritrovi dov'era. Vale uguale per Debian e
+Ubuntu (usa solo `apt`, `dpkg`, `tmux`, `ss` e `ip`).
+
+- **Comandi pronti con la freccia su**: appena entri, `↑` una volta = `apt update`, due = `apt upgrade`,
+  tre = `apt dist-upgrade`. Basta premere Invio.
+- **`lavori stato`** (lo mostra da solo anche quando apri il lavoro zero):
+  - un `apt`/`dpkg` in corso, e se gira dentro tmux (sicuro) o fuori (se cade il collegamento si interrompe);
+  - pacchetti rimasti a metà, dpkg interrotto, aggiornamento cominciato e mai finito: scrive i comandi per riprenderlo
+    (`dpkg --configure -a && apt-get -f install`) e, dentro tmux, chiede se mandarlo avanti;
+  - quanti pacchetti installerebbe davvero `apt-get upgrade` (prova a secco), quelli **trattenuti** (vogliono
+    `dist-upgrade`) e, su Ubuntu, quelli **rimandati a scaglioni** («phased updates»: non è un guasto);
+  - riavvio in sospeso; `needrestart` (su Ubuntu c'è di serie e dopo l'aggiornamento riavvia i servizi, Docker
+    compreso: `NEEDRESTART_MODE=l` per vedere soltanto); aggiornamenti automatici accesi e riavvio automatico;
+  - **Docker** (sotto).
+
+#### Attenzione a Docker
+
+Aggiornare `docker-ce`, `containerd.io`, `runc` & co. **riavvia Docker**: tutti i contenitori si fermano e ripartono
+(anche quelli di Docker senza root) e **cade ogni connessione che passa da un contenitore**. Succede anche a chi sta
+attento da anni, perché non sempre ci si ricorda che la propria connessione ci passa: una VPN, Tailscale, un proxy
+o un tunnel che girano in un contenitore. Se ci passa anche l'SSH con cui stai aggiornando, l'aggiornamento si
+interrompe a metà (dentro il lavoro zero almeno continua) e tu resti fuori finché Docker non è ripartito.
+Dopo il riavvio, poi, non è detto che tutti i contenitori ripartano da soli: va controllato con `docker ps -a`.
+
+Per questo `lavori stato`:
+- guarda le connessioni SSH aperte e dice se una passa da Docker: interfaccia di una rete Docker (`docker0`, `br-*`)
+  oppure un'interfaccia `tun` creata da un processo che sta in un contenitore (di cui dice il nome);
+- se tra gli aggiornamenti c'è Docker, lo dice e propone l'ordine giusto: prima tutto il resto con Docker bloccato
+  (`apt-mark hold …`), poi Docker da sola **da una strada che non passa da Docker** (console del provider o un'altra
+  rete), poi il controllo dei contenitori;
+- se Docker è installato come snap (Ubuntu), avvisa che si aggiorna e si riavvia da solo (`snap refresh --hold docker`).
+
 ### Guardia: le sessioni dimenticate aperte (facoltativo)
 Se cade l'SSH e non ti ricolleghi, la sessione resta aperta con Claude dentro e nessuno te lo dice. La guardia
 guarda proprio questo: le sessioni **staccate**, cioè aperte ma senza nessun terminale collegato.

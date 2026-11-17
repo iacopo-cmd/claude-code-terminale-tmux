@@ -117,6 +117,31 @@ sudo ./installa.sh --promemoria   # without --promemoria: no login message
 lavori                           # menu: n = new project
 ```
 
+### Job zero "Aggiornamenti": updating without getting kicked out (Debian and Ubuntu)
+
+`lavori 0` opens a root terminal inside tmux, **without Claude**, meant for updates and long commands. If SSH drops
+the update keeps running; get back with `lavori 0`. Same on Debian and Ubuntu (only `apt`, `dpkg`, `tmux`, `ss`, `ip`).
+
+- **Commands ready on the up arrow**: `↑` once = `apt update`, twice = `apt upgrade`, three times = `apt dist-upgrade`.
+- **`lavori stato`** (also shown when job zero opens): apt/dpkg running inside or outside tmux; half-installed packages
+  and how to resume them; how many packages `apt-get upgrade` would really install, the **kept back** ones and, on
+  Ubuntu, the **phased** ones (not a fault); pending reboot; `needrestart` (default on Ubuntu, restarts services
+  including Docker: `NEEDRESTART_MODE=l` to only list); unattended upgrades and automatic reboot; **Docker** (below).
+
+#### Mind Docker
+
+Upgrading `docker-ce`, `containerd.io`, `runc` & co. **restarts Docker**: every container stops and starts again (rootless
+ones too) and **every connection going through a container drops**. It happens even to careful people, because it is
+easy to forget that your own connection goes through one: a VPN, Tailscale, a proxy or a tunnel running in a container.
+If your SSH goes through it, the upgrade stops halfway (inside job zero it at least keeps going) and you are locked out
+until Docker is back. Afterwards not every container necessarily comes back by itself: check with `docker ps -a`.
+
+So `lavori stato` checks whether an open SSH connection goes through Docker (a Docker network interface, or a `tun`
+interface created by a process inside a container, named), and if Docker is among the upgrades it suggests the right
+order: everything else first with Docker on hold (`apt-mark hold …`), then Docker alone **from a path that does not go
+through Docker** (provider console or another network), then check the containers. Snap Docker (Ubuntu) refreshes and
+restarts by itself: `snap refresh --hold docker`.
+
 ### Status line and warnings (optional)
 
 `avviso-tmux.sh` shows in Claude Code's status line which session you are in and what to run again
