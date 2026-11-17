@@ -13,6 +13,16 @@
 #   lavori elenco                         solo l'elenco dei lavori, con stato (anche negli script)
 #   lavori <nome> [id-conversazione]      apre il lavoro (riattacca la sessione o la crea; con l'id riprende
 #                                         quella conversazione invece dell'ultima)
+#   lavori 0                              LAVORO ZERO "Aggiornamenti" (uguale: lavori aggiornamenti; nel menu: 0):
+#                                         un terminale di root dentro tmux, SENZA Claude e senza pannelli, per
+#                                         gli aggiornamenti e i comandi lunghi. Se cade il collegamento il comando
+#                                         continua: rientri con "lavori 0" e lo ritrovi dov'era. Non sta
+#                                         nell'indice, c'e' sempre; si chiude scrivendo exit.
+#   lavori stato                          stato degli aggiornamenti (apt): se ce n'e' uno in corso e se gira dentro
+#                                         o fuori da tmux, se e' rimasto qualcosa a meta', quanti pacchetti restano,
+#                                         se serve il riavvio. Se trova qualcosa di incastrato scrive i comandi per
+#                                         riprendere e, dentro tmux, chiede se mandarlo avanti lui. Il lavoro zero
+#                                         lo mostra da solo quando si apre.
 #   lavori nuovo <nome> <cartella> ["descrizione"]   crea un lavoro (cartella e CLAUDE.md se mancano)
 #   lavori info <nome>                    dettagli: cartella, CLAUDE.md, memoria, conversazioni con gli id
 #   lavori descrivi <nome> "descrizione"  cambia la descrizione
@@ -56,7 +66,11 @@ INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
 # la MACCHINA (nome host e indirizzo), i contatori (tempo, token, sessioni aperte), come si accende/spegne la mod
 # e la firma. Resta anche con la mod spenta, cosi' si sa come riaccenderla (LAVORI_FIRMA="" toglie comando e firma)
 FIRMA=${LAVORI_FIRMA-✎ per la mod: iacopo off | on · Iacopo, 6 novembre 2026}
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl 0 zero zero-nota stato aggiornamenti Aggiornamenti "
+# Lavoro ZERO: fisso, fuori dall'indice. Un terminale di root in tmux per gli aggiornamenti (niente Claude, niente pannelli)
+ZERO_NOME=Aggiornamenti
+ZERO_SESS=Aggiornamenti
+ZERO_DESCR="Terminale di root per gli aggiornamenti, senza Claude: se cade il collegamento il comando continua e lo ritrovi qui"
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
@@ -80,6 +94,14 @@ _render() {   # $1 = menu|elenco ; in "menu" numera le righe e popola NOMI[] (pe
     tot=$(righe | grep -c . 2>/dev/null || echo 0)
     printf '\033[36m╭%s╮\033[0m\n' "$(_line "$CW")"
     printf '\033[36m│\033[0m\033[1m%s\033[0m\033[36m│\033[0m\n' "$(_cen "Lavori di Claude Code   ($tot)" "$CW")"
+    # il lavoro ZERO sta sempre in cima e non conta nel totale (non e' un lavoro di Claude)
+    printf '\033[36m├%s┤\033[0m\n' "$(_line "$CW")"
+    if aperta "$ZERO_SESS"; then dot="●"; else dot="○"; fi
+    if [ "$mode" = menu ]; then left="  $(_pad 0 2) $dot $ZERO_NOME"; else left="  $dot $ZERO_NOME"; fi
+    right="lavori 0 "
+    gap=$(( CW - ${#left} - ${#right} )); [ "$gap" -lt 1 ] && gap=1
+    printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "$left$(_line "$gap" ' ')$right" "$CW")"
+    while IFS= read -r rl; do printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "       $rl" "$CW")"; done < <(_wrap "$ZERO_DESCR" $((CW-9)))
     while IFS=$'\t' read -r nome sess cart creato uso descr; do
         [ -z "$nome" ] && continue
         printf '\033[36m├%s┤\033[0m\n' "$(_line "$CW")"
@@ -366,7 +388,7 @@ stampa_menu() {
         echo; echo "  n = nuovo lavoro   ·   q = esci"; return
     fi
     _render menu
-    echo "  [numero] apri · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
+    echo "  [numero] apri · 0 aggiornamenti · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
 }
 
 # descrizione -> nome proposto in CamelCase ("my admin telegram bot" -> "MyAdminTelegramBot"), max 24
@@ -411,6 +433,7 @@ menu() {
         read -r -p "  Scelta: " scelta || { echo; exit 0; }
         case "$scelta" in
             q|Q|"")   exit 0 ;;
+            0)        zero ;;
             n|N)      chiedi_nuovo ;;
             "?")      echo; spiegazione; read -r -p "  (Invio per tornare al menu) " _ ;;
             a|A)      echo; aiuto | ${PAGER:-less -R} ;;
@@ -433,12 +456,121 @@ promemoria() {   # per il login SSH: due righe, solo se non sei gia' dentro tmux
     echo "💡 Claude Code: scrivi \"lavori\" per il menu dei lavori (ogni lavoro gira in tmux e non si perde se cade l'SSH)."
     if [ -n "$aperti" ]; then echo "   Già aperti: ${aperti% } → lavori <nome> per rientrare."
     else echo "   Nessun lavoro aperto. Nuovo: lavori → n."; fi
+    echo "   Aggiornamenti: lavori 0 (terminale in tmux: se cade l'SSH il comando continua)."
+}
+
+# ---------------------------------------------------------------------------------------------------------
+# Lavoro ZERO: il terminale degli aggiornamenti
+# ---------------------------------------------------------------------------------------------------------
+ZERO_DPKG=${LAVORI_DPKG:-/var/lib/dpkg}                    # LAVORI_DPKG / LAVORI_APTLOG: solo per le prove (stato finto,
+ZERO_APTLOG=${LAVORI_APTLOG:-/var/log/apt/history.log}     # e allora il "mandalo avanti" non esegue niente)
+ZERO_RIPRENDI="dpkg --configure -a && apt-get -f install"
+ZERO_APT='apt|apt-get|aptitude|dpkg|unattended-upgr'
+
+zero_stato() {   # stato degli aggiornamenti: c'e' un apt in corso (e dove)? qualcosa di incastrato? se si', lo manda avanti
+    if ! command -v apt-get >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
+        echo " (su questa macchina non c'è apt: niente stato degli aggiornamenti)"; return 0
+    fi
+    local pid com tty da padre corso=0 fuori=0 meta nmeta rotti ult inizio fine n guai=0 r
+    printf '\033[1m STATO DEGLI AGGIORNAMENTI\033[0m   %s\n' "$(date '+%d/%m %H:%M')"
+    # 1. c'e' un apt o un dpkg che gira adesso? Dentro tmux o fuori?
+    while read -r pid com; do
+        [ -n "$pid" ] || continue
+        padre=$(ps -o comm= -p "$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" 2>/dev/null)
+        [[ "$padre" =~ ^($ZERO_APT)$ ]] && continue          # il dpkg lanciato da apt: conta apt
+        # "unattended-upgrade-shutdown" e' il guardiano sempre acceso di Debian, non un aggiornamento che gira
+        tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'unattended-upgrade-shutdown' && continue
+        corso=$((corso+1))
+        tty=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' '); da=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
+        if [ -z "$tty" ] || [ "$tty" = "?" ]; then
+            printf ' \033[33m●\033[0m %s in corso da %s (pid %s), automatico, senza terminale: non dipende dal collegamento\n' "$com" "$da" "$pid"
+        elif tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -q '^TMUX='; then
+            printf ' \033[32m●\033[0m %s in corso da %s (pid %s) su %s, DENTRO tmux: se cade il collegamento continua\n' "$com" "$da" "$pid" "$tty"
+        else
+            fuori=$((fuori+1))
+            printf ' \033[31m●\033[0m %s in corso da %s (pid %s) su %s, FUORI da tmux: se cade quel collegamento si interrompe\n' "$com" "$da" "$pid" "$tty"
+        fi
+    done < <(pgrep -l -x "$ZERO_APT" 2>/dev/null)
+    if [ "$corso" -gt 0 ]; then
+        echo "   Non lanciarne un altro e non toccare quello: lascialo finire."
+        [ "$fuori" -gt 0 ] && echo "   Qui dentro non si può spostare. Se cade, torna qui e scrivi: lavori stato   (ti dice cosa è rimasto a metà e lo manda avanti)"
+        echo "   I pacchetti a metà si controllano quando ha finito: lavori stato"
+        return 0
+    fi
+    printf ' \033[32m✓\033[0m nessun apt o dpkg in corso\n'
+    # 2. qualcosa di incastrato? pacchetti a meta', dpkg interrotto, ultimo aggiornamento cominciato e mai finito
+    meta=$(dpkg-query --admindir="$ZERO_DPKG" -W -f='${db:Status-Abbrev}|${Package}\n' 2>/dev/null | awk -F'|' '{s=$1; gsub(/ /,"",s)} s!="ii" && s!="rc" && s!="hi" && s!="un" && s!="pn" {print $2}')
+    nmeta=$(printf '%s' "$meta" | grep -c . || true)
+    rotti=$(ls "$ZERO_DPKG/updates/" 2>/dev/null | grep -c '^[0-9]' || true)
+    ult=$(awk '/^Start-Date:/{s=$2" "$3; e=""} /^End-Date:/{e=$2" "$3} END{print s"|"e}' "$ZERO_APTLOG" 2>/dev/null)
+    inizio=${ult%%|*}; fine=${ult##*|}
+    if [ "$nmeta" -gt 0 ]; then
+        guai=1; printf ' \033[31m✗\033[0m %s pacchetti rimasti a metà: %s\n' "$nmeta" "$(printf '%s' "$meta" | head -8 | tr '\n' ' ')$([ "$nmeta" -gt 8 ] && echo ...)"
+    fi
+    if [ "$rotti" -gt 0 ]; then guai=1; printf ' \033[31m✗\033[0m dpkg è stato interrotto a metà di una scrittura (%s pezzi in sospeso)\n' "$rotti"; fi
+    if [ -n "$inizio" ] && [ -z "$fine" ]; then guai=1; printf ' \033[31m✗\033[0m l'"'"'ultimo aggiornamento è cominciato il %s e non risulta finito\n' "$inizio"; fi
+    if [ "$guai" = 0 ]; then
+        printf ' \033[32m✓\033[0m niente di incastrato%s\n' "${fine:+ (ultimo aggiornamento finito il $fine)}"
+    fi
+    # 3. cosa resta da aggiornare (secondo l'ultimo apt-get update) e il riavvio
+    n=$(apt list --upgradable 2>/dev/null | grep -c '/' || true)
+    echo " · da aggiornare: $n pacchetti (secondo l'ultimo apt-get update)"
+    if [ -e /var/run/reboot-required ]; then
+        printf ' \033[33m⚠\033[0m riavvio in sospeso%s\n' "$( [ -s /var/run/reboot-required.pkgs ] && printf ' per: %s' "$(sort -u /var/run/reboot-required.pkgs | tail -3 | tr '\n' ' ')")"
+    fi
+    [ "$guai" = 1 ] || return 0
+    # 4. incastrato: i comandi per mandarlo avanti e, se siamo in tmux davanti a un terminale, lo fa lui
+    echo
+    echo " Per mandarlo avanti:   $ZERO_RIPRENDI"
+    echo " e poi di nuovo:        apt-get upgrade"
+    if [ ! -t 0 ] || [ ! -t 1 ]; then return 0; fi
+    if [ -z "${TMUX:-}" ]; then echo " Non sei dentro tmux: entra con   lavori 0   e te lo chiede lì (così non si interrompe un'altra volta)."; return 0; fi
+    read -r -p " Lo mando avanti adesso? [s/N] " r || return 0
+    case "$r" in
+        s|S|si|SI|sì) if [ -n "${LAVORI_DPKG:-}" ]; then echo " (prova: non eseguo niente)"; return 0; fi
+                      registra "aggiornamenti: mandato avanti ($ZERO_RIPRENDI)"
+                      dpkg --configure -a && apt-get -f install
+                      echo; echo " Finito (esito $?). Adesso: apt-get upgrade   ·   per ricontrollare: lavori stato" ;;
+        *)            echo " Lasciato com'è." ;;
+    esac
+}
+
+zero_nota() {   # le righe in testa al terminale del lavoro zero: come si rientra, lo stato, i comandi
+    printf '\033[1m LAVORO 0 · %s\033[0m   terminale di root dentro tmux, senza Claude\n' "$ZERO_NOME"
+    echo " Se cade il collegamento il comando CONTINUA: rientra con   lavori 0"
+    echo " Staccarsi senza chiudere: Ctrl-b d   ·   rileggere in su: Ctrl-b [ poi PagSu (q esce)   ·   chiudere: exit"
+    echo
+    if command -v apt-get >/dev/null 2>&1; then
+        echo " Aggiornare (da qui dentro):   apt-get update && apt-get upgrade"
+        echo " Riprendere uno interrotto, anche se era partito FUORI da tmux ed è caduto:"
+        echo "                               $ZERO_RIPRENDI      poi di nuovo: apt-get upgrade"
+        echo " Rivedere lo stato:            lavori stato"
+        echo
+        zero_stato
+        echo
+    fi
+}
+
+zero() {
+    if aperta "$ZERO_SESS"; then
+        registra "apri $ZERO_NOME (riattacca)"
+    else
+        local col rig; col=$(tput cols 2>/dev/null || echo 80); rig=$(tput lines 2>/dev/null || echo 24)
+        [[ "$col" =~ ^[0-9]+$ ]] || col=80; [[ "$rig" =~ ^[0-9]+$ ]] || rig=24
+        local io; io=$(readlink -f "$0" 2>/dev/null || echo "$0")   # percorso intero: la sessione nasce in un'altra cartella
+        registra "apri $ZERO_NOME (nuova sessione)"
+        tmux new-session -d -s "$ZERO_SESS" -x "$col" -y "$rig" -c "$HOME" "'$io' zero-nota; exec \"\${SHELL:-/bin/bash}\" -l" \
+            || errore "tmux non e' riuscito a creare la sessione"
+    fi
+    if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$ZERO_SESS"; fi
+    exec tmux attach -t "=$ZERO_SESS"
 }
 
 aiuto() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 prepara
 case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in iacopo|iacopostyle|stile|styl) stile "${2:-}"; exit ;; esac
+case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in 0|zero|aggiornamenti) zero ;; zero-nota) zero_nota; exit ;; stato) zero_stato; exit ;; esac
 case "${1:-}" in
     "")                 if [ -t 0 ] && [ -t 1 ]; then menu; else elenco; fi ;;
     menu)               menu ;;

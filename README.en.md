@@ -79,6 +79,8 @@ remind you to use `lavori` and show which projects are already open (file `/etc/
 | `lavori elenco` | just the list: state (● open, closed, ✗ missing folder), folder, last use, description |
 | `lavori <name>` | opens the project: reattaches to its tmux session, or creates it in the right folder and starts Claude resuming **the latest conversation** (`--continue`) |
 | `lavori <name> <id>` | same, but resumes that conversation (`--resume <id>`) |
+| `lavori 0` | **job zero "Aggiornamenti" (updates)**: a root terminal inside tmux, **without Claude**, for updates and long commands. If the connection drops the command keeps running; get back with `lavori 0` (same: `lavori zero`, `lavori aggiornamenti`; in the menu: `0`). Not in the index, always on top |
+| `lavori stato` | update status (apt): one running, inside or outside tmux; half-installed packages; how many are left; pending reboot. If something is stuck it prints the commands to resume and, inside tmux, asks whether to run them |
 | `lavori nuovo <name> <folder> "description"` | creates the project: folder and a starter `CLAUDE.md` (if missing) and the index entry |
 | `lavori info <name>` | details: folder, `CLAUDE.md`, memory, latest conversations with id, date and size |
 | `lavori descrivi <name> "description"` | changes the description |

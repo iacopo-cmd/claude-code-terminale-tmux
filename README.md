@@ -67,6 +67,8 @@ quello che è aperto.
 | `lavori` | elenco: stato (● aperto, chiuso, ✗ cartella mancante), cartella, ultimo uso, descrizione |
 | `lavori <nome>` | apre il lavoro: si riattacca alla sua sessione tmux, oppure la crea nella cartella giusta e avvia Claude riprendendo **l'ultima conversazione** (`--continue`) |
 | `lavori <nome> <id>` | come sopra, ma riprende quella conversazione (`--resume <id>`) |
+| `lavori 0` | **lavoro zero «Aggiornamenti»**: terminale di root dentro tmux, **senza Claude**, per aggiornamenti e comandi lunghi. Se cade il collegamento il comando continua; rientri con `lavori 0` (uguale: `lavori zero`, `lavori aggiornamenti`; nel menu: `0`). Non sta nell'indice, c'è sempre in cima |
+| `lavori stato` | stato degli aggiornamenti (apt): uno in corso, dentro o fuori da tmux; pacchetti rimasti a metà; quanti restano; riavvio in sospeso. Se trova qualcosa di incastrato scrive i comandi per riprendere e, dentro tmux, chiede se mandarlo avanti |
 | `lavori nuovo <nome> <cartella> "descrizione"` | crea il lavoro: la cartella e un `CLAUDE.md` di partenza (se mancano) e la riga nell'indice |
 | `lavori info <nome>` | dettagli: cartella, `CLAUDE.md`, memoria, ultime conversazioni con id, data e dimensione |
 | `lavori descrivi <nome> "descrizione"` | cambia la descrizione |
