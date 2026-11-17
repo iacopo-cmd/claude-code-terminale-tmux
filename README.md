@@ -181,8 +181,16 @@ Al posto di `lavori iacopo` vanno bene anche `lavori stile`, `lavori styl` e `la
 lunghi. Se cade l'SSH l'aggiornamento continua; rientri con `lavori 0` e lo ritrovi dov'era. Vale uguale per Debian e
 Ubuntu (usa solo `apt`, `dpkg`, `tmux`, `ss` e `ip`).
 
-- **Comandi pronti con la freccia su**: appena entri, `↑` una volta = `apt update`, due = `apt upgrade`,
-  tre = `apt dist-upgrade`. Basta premere Invio.
+- **Comandi pronti con la freccia su**, calcolati quando apri il terminale (basta `↑` e Invio):
+  - se l'ultimo aggiornamento **non ha finito** (pacchetti a metà, dpkg interrotto, apt senza fine nel registro),
+    il primo è lo sblocco che riprende tutto: `dpkg --configure -a && apt-get -f install && apt update && apt full-upgrade`,
+    il secondo solo lo sblocco;
+  - altrimenti il primo è **tutto attaccato**: `apt update && apt full-upgrade` (`full-upgrade` = upgrade e
+    dist-upgrade in un colpo, chiede il Sì una volta sola);
+  - se tra gli aggiornamenti c'è Docker, quello attaccato lo tiene fuori (`apt-mark hold`, poi `unhold`): Docker va
+    fatto a parte, vedi sotto;
+  - poi i soliti, uno per volta: `apt update`, `apt upgrade`, `apt dist-upgrade`.
+  `lavori zero-comandi` li stampa nell'ordine in cui escono.
 - **`lavori stato`** (lo mostra da solo anche quando apri il lavoro zero):
   - un `apt`/`dpkg` in corso, e se gira dentro tmux (sicuro) o fuori (se cade il collegamento si interrompe);
   - pacchetti rimasti a metà, dpkg interrotto, aggiornamento cominciato e mai finito: scrive i comandi per riprenderlo

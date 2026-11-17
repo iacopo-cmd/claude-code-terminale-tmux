@@ -122,7 +122,11 @@ lavori                           # menu: n = new project
 `lavori 0` opens a root terminal inside tmux, **without Claude**, meant for updates and long commands. If SSH drops
 the update keeps running; get back with `lavori 0`. Same on Debian and Ubuntu (only `apt`, `dpkg`, `tmux`, `ss`, `ip`).
 
-- **Commands ready on the up arrow**: `↑` once = `apt update`, twice = `apt upgrade`, three times = `apt dist-upgrade`.
+- **Commands ready on the up arrow**, worked out when the terminal opens (`↑` and Enter): if the last update **did not
+  finish**, the first one is the unlock that resumes everything (`dpkg --configure -a && apt-get -f install && apt update
+  && apt full-upgrade`), the second only the unlock; otherwise the first is **all in one go**, `apt update && apt
+  full-upgrade` (one confirmation only); if Docker is among the upgrades, that one keeps it out (`apt-mark hold`/`unhold`);
+  then the usual `apt update`, `apt upgrade`, `apt dist-upgrade`. `lavori zero-comandi` prints them in order.
 - **`lavori stato`** (also shown when job zero opens): apt/dpkg running inside or outside tmux; half-installed packages
   and how to resume them; how many packages `apt-get upgrade` would really install, the **kept back** ones and, on
   Ubuntu, the **phased** ones (not a fault); pending reboot; `needrestart` (default on Ubuntu, restarts services

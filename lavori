@@ -66,7 +66,7 @@ INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
 # la MACCHINA (nome host e indirizzo), i contatori (tempo, token, sessioni aperte), come si accende/spegne la mod
 # e la firma. Resta anche con la mod spenta, cosi' si sa come riaccenderla (LAVORI_FIRMA="" toglie comando e firma)
 FIRMA=${LAVORI_FIRMA-✎ per la mod: iacopo off | on · Iacopo, 6 novembre 2026}
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl 0 zero zero-nota stato aggiornamenti Aggiornamenti "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl 0 zero zero-nota zero-comandi stato aggiornamenti Aggiornamenti "
 # Lavoro ZERO: fisso, fuori dall'indice. Un terminale di root in tmux per gli aggiornamenti (niente Claude, niente pannelli)
 ZERO_NOME=Aggiornamenti
 ZERO_SESS=Aggiornamenti
@@ -536,6 +536,40 @@ zero_stato() {   # stato degli aggiornamenti: c'e' un apt in corso (e dove)? qua
     esac
 }
 
+zero_incastrato() {   # 0 (vero) se l'ultimo aggiornamento non ha finito: pacchetti a metà, dpkg interrotto, apt senza fine
+    local meta rotti ult
+    meta=$(dpkg-query --admindir="$ZERO_DPKG" -W -f='${db:Status-Abbrev}|${Package}\n' 2>/dev/null | awk -F'|' '{s=$1; gsub(/ /,"",s)} s!="ii" && s!="rc" && s!="hi" && s!="un" && s!="pn" {print $2}')
+    [ -n "$meta" ] && return 0
+    rotti=$(ls "$ZERO_DPKG/updates/" 2>/dev/null | grep -c '^[0-9]' || true)
+    [ "$rotti" -gt 0 ] && return 0
+    ult=$(awk '/^Start-Date:/{s=$2" "$3; e=""} /^End-Date:/{e=$2" "$3} END{print s"|"e}' "$ZERO_APTLOG" 2>/dev/null)
+    [ -n "${ult%%|*}" ] && [ -z "${ult##*|}" ] && return 0
+    return 1
+}
+
+zero_docker_pk() {   # i pacchetti di Docker tra quelli che apt aggiornerebbe (anche con full-upgrade)
+    LC_ALL=C apt-get -s -o Debug::NoLocking=1 dist-upgrade 2>/dev/null | awk '/^Inst /{print $2}' | grep -xE "$ZERO_DOCKER_PKG" | xargs
+}
+
+zero_comandi() {   # i comandi della freccia SU, uno per riga, nell'ordine in cui escono (il primo = una pressione)
+    command -v apt-get >/dev/null 2>&1 || return 0
+    local tutto="apt update && apt full-upgrade" pk
+    pk=$(zero_docker_pk)
+    # Docker da aggiornare: tutto il resto sì, Docker no (resta bloccato e poi si sblocca: va fatto a parte, da console)
+    [ -n "$pk" ] && tutto="apt-mark hold $pk && apt update && apt full-upgrade; apt-mark unhold $pk"
+    if zero_incastrato; then
+        echo "$ZERO_RIPRENDI && $tutto"
+        echo "$ZERO_RIPRENDI"
+    else
+        echo "$tutto"
+    fi
+    echo "apt update"
+    echo "apt upgrade"
+    echo "apt dist-upgrade"
+    [ -n "$pk" ] && echo "apt update && apt full-upgrade"
+    return 0
+}
+
 zero_quanti() {   # quanti pacchetti installerebbe davvero «apt-get upgrade» (prova a secco, vale per Debian e Ubuntu)
     local sim n tenuti fasi
     sim=$(LC_ALL=C apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null)
@@ -561,7 +595,7 @@ zero_contenitore_di() {   # nome del contenitore Docker a cui appartiene un proc
 zero_docker() {   # aggiornare Docker riavvia Docker: si fermano i contenitori e cadono le connessioni che ci passano
     command -v docker >/dev/null 2>&1 || command -v containerd >/dev/null 2>&1 || return 0
     local pk vie=0 riga peer dev pid fd cont
-    pk=$(LC_ALL=C apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | awk '/^Inst /{print $2}' | grep -xE "$ZERO_DOCKER_PKG" | xargs)
+    pk=$(zero_docker_pk)
     if command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1; then
         printf ' \033[33m⚠\033[0m Docker è uno snap: si aggiorna (e si riavvia) da solo quando snapd decide. Per fermarlo: snap refresh --hold docker\n'
     fi
@@ -621,7 +655,10 @@ zero_nota() {   # le righe in testa al terminale del lavoro zero: come si rientr
     echo
     if command -v apt-get >/dev/null 2>&1; then
         echo " Aggiornare (da qui dentro):   apt-get update && apt-get upgrade      (Ubuntu e Debian: uguale)"
-        echo " Già pronti con la freccia SU: 1 volta apt update · 2 volte apt upgrade · 3 volte apt dist-upgrade (poi Invio)"
+        echo " Già pronti con la freccia SU (poi Invio):"
+        local i=0 c
+        while IFS= read -r c; do i=$((i+1)); printf '   %s ↑  %s\n' "$i" "$c"; done < <(zero_comandi)
+        echo "   «apt full-upgrade» = upgrade + dist-upgrade in un colpo: chiede il Sì una volta sola."
         echo " Cambio di versione:           Ubuntu: do-release-upgrade   ·   Debian: cambiare il nome in sources e apt full-upgrade"
         echo " Docker per ultimo: riavviarlo fa cadere i contenitori e le connessioni che ci passano (vedi sotto)"
         echo " Riprendere uno interrotto, anche se era partito FUORI da tmux ed è caduto:"
@@ -633,7 +670,7 @@ zero_nota() {   # le righe in testa al terminale del lavoro zero: come si rientr
     fi
 }
 
-# Comandi pronti con la freccia SU nel terminale del lavoro zero: 1 volta = apt update, 2 = apt upgrade, 3 = apt dist-upgrade
+# Comandi pronti con la freccia SU nel terminale del lavoro zero (zero_comandi: il primo è quello giusto adesso)
 ZERO_RC=${LAVORI_ZERO_RC:-/etc/lavori/zero-bashrc}
 zero_bashrc() {   # scrive il file di avvio della shell del lavoro zero (bash normale + i comandi pronti nella cronologia)
     mkdir -p "$(dirname "$ZERO_RC")" 2>/dev/null || return 1
@@ -642,10 +679,13 @@ zero_bashrc() {   # scrive il file di avvio della shell del lavoro zero (bash no
 [ -f /etc/bash.bashrc ] && . /etc/bash.bashrc
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
 HISTCONTROL=ignoreboth:erasedups
-# freccia SU: la prima volta apt update, poi apt upgrade, poi apt dist-upgrade (l'ultimo messo è il primo che esce)
-history -s "apt dist-upgrade"
-history -s "apt upgrade"
-history -s "apt update"
+FINE
+    local io; io=$(readlink -f "$0" 2>/dev/null || echo "$0")
+    cat >> "$ZERO_RC.nuovo" <<FINE || return 1
+# freccia SU: i comandi di «lavori zero-comandi», calcolati all'apertura (il primo che esce è quello giusto adesso:
+# lo sblocco se l'ultimo aggiornamento non ha finito, altrimenti tutto attaccato)
+while IFS= read -r _c; do [ -n "\$_c" ] && history -s "\$_c"; done < <('$io' zero-comandi | tac)
+unset _c
 FINE
     mv -f "$ZERO_RC.nuovo" "$ZERO_RC"
 }
@@ -673,7 +713,7 @@ aiuto() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 prepara
 case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in iacopo|iacopostyle|stile|styl) stile "${2:-}"; exit ;; esac
-case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in 0|zero|aggiornamenti) zero ;; zero-nota) zero_nota; exit ;; stato) zero_stato; exit ;; esac
+case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in 0|zero|aggiornamenti) zero ;; zero-nota) zero_nota; exit ;; zero-comandi) zero_comandi; exit ;; stato) zero_stato; exit ;; esac
 case "${1:-}" in
     "")                 if [ -t 0 ] && [ -t 1 ]; then menu; else elenco; fi ;;
     menu)               menu ;;
