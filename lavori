@@ -18,6 +18,10 @@
 #                                         gli aggiornamenti e i comandi lunghi. Se cade il collegamento il comando
 #                                         continua: rientri con "lavori 0" e lo ritrovi dov'era. Non sta
 #                                         nell'indice, c'e' sempre; si chiude scrivendo exit.
+#   lavori opencode                       OPENCODE (nel menu: o): un terminale tmux con OpenCode dentro, al posto
+#                                         di Claude. Voce fissa come il lavoro zero, compare solo se OpenCode c'e'.
+#                                         Puo' girare come un altro utente (consigliato: non root). Impostazioni in
+#                                         /etc/lavori/opencode (righe chiave=valore): utente=, cartella=, comando=.
 #   lavori stato                          stato degli aggiornamenti (apt): se ce n'e' uno in corso e se gira dentro
 #                                         o fuori da tmux, se e' rimasto qualcosa a meta', quanti pacchetti restano,
 #                                         se serve il riavvio. Se trova qualcosa di incastrato scrive i comandi per
@@ -66,11 +70,25 @@ INTESTAZIONE=$'# nome\tsessione\tcartella\tcreato\tultimo_uso\tdescrizione'
 # la MACCHINA (nome host e indirizzo), i contatori (tempo, token, sessioni aperte), come si accende/spegne la mod
 # e la firma. Resta anche con la mod spenta, cosi' si sa come riaccenderla (LAVORI_FIRMA="" toglie comando e firma)
 FIRMA=${LAVORI_FIRMA-✎ per la mod: iacopo off | on · Iacopo, 6 novembre 2026}
-RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl 0 zero zero-nota zero-comandi stato aggiornamenti Aggiornamenti "
+RISERVATI=" nuovo info descrivi togli aiuto elenco help menu promemoria ore guida iacopo iacopostyle stile styl 0 zero zero-nota zero-comandi stato aggiornamenti Aggiornamenti opencode OpenCode o "
 # Lavoro ZERO: fisso, fuori dall'indice. Un terminale di root in tmux per gli aggiornamenti (niente Claude, niente pannelli)
 ZERO_NOME=Aggiornamenti
 ZERO_SESS=Aggiornamenti
 ZERO_DESCR="Terminale di root per gli aggiornamenti, senza Claude: se cade il collegamento il comando continua e lo ritrovi qui"
+# OpenCode: fisso, fuori dall'indice. Impostazioni in $DIR/opencode (chiave=valore), o variabili LAVORI_OPENCODE_*
+OC_NOME=OpenCode
+OC_SESS=OpenCode
+oc_conf() { awk -F= -v k="$1" '$1==k{sub(/^[^=]*=/,""); print; exit}' "${LAVORI_DIR:-/etc/lavori}/opencode" 2>/dev/null; }
+OC_UTENTE=${LAVORI_OPENCODE_UTENTE-$(oc_conf utente)}          # vuoto = l'utente che lancia lavori
+oc_casa() { if [ -n "$OC_UTENTE" ]; then getent passwd "$OC_UTENTE" | cut -d: -f6; else echo "$HOME"; fi; }
+OC_CARTELLA=${LAVORI_OPENCODE_CARTELLA-$(oc_conf cartella)}; [ -n "$OC_CARTELLA" ] || OC_CARTELLA="$(oc_casa)/opencode"
+OC_CMD=${LAVORI_OPENCODE_CMD-$(oc_conf comando)}
+if [ -z "$OC_CMD" ]; then
+    if [ -x "$(oc_casa)/.opencode/bin/opencode" ]; then OC_CMD="$(oc_casa)/.opencode/bin/opencode"
+    else OC_CMD=$(command -v opencode 2>/dev/null || true); fi
+fi
+oc_ce() { [ -n "$OC_CMD" ] && [ -x "$OC_CMD" ]; }
+OC_DESCR="OpenCode al posto di Claude${OC_UTENTE:+, come utente $OC_UTENTE}, in $OC_CARTELLA"
 
 errore() { printf 'lavori: %s\n' "$*" >&2; exit 1; }
 registra() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*" >> "$REGISTRO" 2>/dev/null || true; }
@@ -102,6 +120,15 @@ _render() {   # $1 = menu|elenco ; in "menu" numera le righe e popola NOMI[] (pe
     gap=$(( CW - ${#left} - ${#right} )); [ "$gap" -lt 1 ] && gap=1
     printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "$left$(_line "$gap" ' ')$right" "$CW")"
     while IFS= read -r rl; do printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "       $rl" "$CW")"; done < <(_wrap "$ZERO_DESCR" $((CW-9)))
+    if oc_ce; then   # OpenCode, voce fissa subito sotto il lavoro zero (solo se e' installato)
+        printf '\033[36m├%s┤\033[0m\n' "$(_line "$CW")"
+        if aperta "$OC_SESS"; then dot="●"; else dot="○"; fi
+        if [ "$mode" = menu ]; then left="  $(_pad o 2) $dot $OC_NOME"; else left="  $dot $OC_NOME"; fi
+        right="lavori opencode "
+        gap=$(( CW - ${#left} - ${#right} )); [ "$gap" -lt 1 ] && gap=1
+        printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "$left$(_line "$gap" ' ')$right" "$CW")"
+        while IFS= read -r rl; do printf '\033[36m│\033[0m%s\033[36m│\033[0m\n' "$(_pad "       $rl" "$CW")"; done < <(_wrap "$OC_DESCR" $((CW-9)))
+    fi
     while IFS=$'\t' read -r nome sess cart creato uso descr; do
         [ -z "$nome" ] && continue
         printf '\033[36m├%s┤\033[0m\n' "$(_line "$CW")"
@@ -388,7 +415,7 @@ stampa_menu() {
         echo; echo "  n = nuovo lavoro   ·   q = esci"; return
     fi
     _render menu
-    echo "  [numero] apri · 0 aggiornamenti · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
+    echo "  [numero] apri · 0 aggiornamenti$(oc_ce && echo ' · o opencode') · n nuovo · i dettagli · ? come funziona · a guida · q esci    ● aperto ○ chiuso ✗ manca"
 }
 
 # descrizione -> nome proposto in CamelCase ("my admin telegram bot" -> "MyAdminTelegramBot"), max 24
@@ -434,6 +461,7 @@ menu() {
         case "$scelta" in
             q|Q|"")   exit 0 ;;
             0)        zero ;;
+            o|O)      if oc_ce; then opencode; else echo "  OpenCode non è installato."; fi ;;
             n|N)      chiedi_nuovo ;;
             "?")      echo; spiegazione; read -r -p "  (Invio per tornare al menu) " _ ;;
             a|A)      echo; aiuto | ${PAGER:-less -R} ;;
@@ -690,6 +718,31 @@ FINE
     mv -f "$ZERO_RC.nuovo" "$ZERO_RC"
 }
 
+opencode() {   # la sessione fissa di OpenCode: la riattacca o la crea (come l'utente scelto, nella sua cartella)
+    oc_ce || errore "OpenCode non trovato (mettilo in /etc/lavori/opencode: comando=...)"
+    if aperta "$OC_SESS"; then
+        registra "apri $OC_NOME (riattacca)"
+    else
+        local col rig; col=$(tput cols 2>/dev/null || echo 80); rig=$(tput lines 2>/dev/null || echo 24)
+        [[ "$col" =~ ^[0-9]+$ ]] || col=80; [[ "$rig" =~ ^[0-9]+$ ]] || rig=24
+        local dentro fine="echo; echo 'OpenCode chiuso. Invio per chiudere la sessione (lavori opencode per riaprirla).'; read"
+        if [ -n "$OC_UTENTE" ] && [ "$OC_UTENTE" != "$(id -un)" ]; then
+            id "$OC_UTENTE" >/dev/null 2>&1 || errore "utente sconosciuto: $OC_UTENTE"
+            sudo -u "$OC_UTENTE" -H mkdir -p "$OC_CARTELLA" || errore "non riesco a creare $OC_CARTELLA"
+            dentro="sudo -u '$OC_UTENTE' -H bash -lc \"cd '$OC_CARTELLA' && exec '$OC_CMD'\""
+        else
+            mkdir -p "$OC_CARTELLA" || errore "non riesco a creare $OC_CARTELLA"
+            dentro="cd '$OC_CARTELLA' && '$OC_CMD'"
+        fi
+        registra "apri $OC_NOME (nuova sessione${OC_UTENTE:+, utente $OC_UTENTE})"
+        tmux new-session -d -s "$OC_SESS" -x "$col" -y "$rig" -c "$OC_CARTELLA" "$dentro; $fine" \
+            || errore "tmux non e' riuscito a creare la sessione"
+        barra "$OC_SESS"
+    fi
+    if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "=$OC_SESS"; fi
+    exec tmux attach -t "=$OC_SESS"
+}
+
 zero() {
     if aperta "$ZERO_SESS"; then
         registra "apri $ZERO_NOME (riattacca)"
@@ -713,7 +766,7 @@ aiuto() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 prepara
 case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in iacopo|iacopostyle|stile|styl) stile "${2:-}"; exit ;; esac
-case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in 0|zero|aggiornamenti) zero ;; zero-nota) zero_nota; exit ;; zero-comandi) zero_comandi; exit ;; stato) zero_stato; exit ;; esac
+case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in 0|zero|aggiornamenti) zero ;; opencode) opencode ;; zero-nota) zero_nota; exit ;; zero-comandi) zero_comandi; exit ;; stato) zero_stato; exit ;; esac
 case "${1:-}" in
     "")                 if [ -t 0 ] && [ -t 1 ]; then menu; else elenco; fi ;;
     menu)               menu ;;
