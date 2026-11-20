@@ -697,7 +697,7 @@ zero_nota() {   # le righe in testa al terminale del lavoro zero: come si rientr
 }
 
 # Comandi pronti con la freccia SU nel terminale del lavoro zero (zero_comandi: il primo è quello giusto adesso)
-ZERO_RC=${LAVORI_ZERO_RC:-/etc/lavori/zero-bashrc}
+ZERO_RC=${LAVORI_ZERO_RC:-$DIR/zero-bashrc}
 zero_bashrc() {   # scrive il file di avvio della shell del lavoro zero (bash normale + i comandi pronti nella cronologia)
     mkdir -p "$(dirname "$ZERO_RC")" 2>/dev/null || return 1
     cat > "$ZERO_RC.nuovo" <<'FINE' || return 1
