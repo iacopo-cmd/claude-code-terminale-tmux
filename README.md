@@ -252,7 +252,7 @@ Nelle sessioni aperte con `lavori` la barra in basso è tutta su **una riga**, a
 sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
 
 ```
-[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 🪙 367k · ⏱ 0h23m · ● 2 aperte · Iacopo, 6 novembre 2026 · ✎ per la mod: iacopo off | on (ora on)
+[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 🪙 367k · ⏱ 0h23m · ● 2 aperte · Iacopo, 6 novembre 2026
 ```
 
 - **la macchina**: nome host e indirizzo, per non sbagliare macchina quando ne hai più d'una aperta
@@ -267,7 +267,7 @@ Sotto c'è una **seconda riga** con il **tempo vero di lavoro**, calcolato dagli
 messaggi, le risposte e i passi di Claude): le pause di più di 1 minuto in cui nessuno scrive non contano.
 
 ```
-✍ lavoro vero · sessione 0h05m · questo lavoro 1h18m · tutti i lavori 81h29m · senza le pause oltre 1 minuto
+✍ lavoro vero (senza le pause): sessione 0h05m · questo lavoro 1h18m · tutti i lavori 81h29m · ✎ per la mod: iacopo off | on (ora on)
 ```
 
 Il ⏱ della prima riga invece è il tempo di apertura della sessione: riparte da zero a ogni sessione nuova e corre

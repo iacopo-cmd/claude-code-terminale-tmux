@@ -13,7 +13,10 @@
 # Spiegazione della leggenda: comando "aiuto".
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in caratteri e non in byte
-TEMPI=0; [ "${1:-}" = --tempi ] && { TEMPI=1; shift; }   # --tempi: stampa solo la seconda riga (tempi veri)
+# --riga1 / --tempi: la barra su DUE righe (cosi' le scritte restano intere): sopra la sostanza, sotto i tempi veri
+# di lavoro e, per ultimo, l'interruttore dello stile. Senza opzioni: tutto su una riga, come prima.
+TEMPI=0; RIGA1=0
+case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; esac
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
@@ -124,9 +127,17 @@ print(ses, lav, tut)
 PY
   )
   # stessa forma della prima riga: voci separate da " · ", dal piccolo al grande
-  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero · sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut") · senza le pause oltre 1 minuto"
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero (senza le pause): sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut")"
 fi
-if [ "$TEMPI" = 1 ]; then printf '%*s%s ' $(( ${#s} + 2 )) "" "$attivo"; exit 0; fi   # rientro: parte sotto la macchina
+if [ "$TEMPI" = 1 ]; then      # seconda riga: tempi veri, poi (ultimo) l'interruttore dello stile, scritto per intero
+  o=$attivo
+  if [ "${2:-}" != senzafirma ]; then
+    lungo="✎ per la mod: iacopo off | on (ora $stile)"
+    if [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( ${#o} + ${#lungo} + 8 )) -gt "$larg" ]; then lungo="✎ iacopo off|on ($stile)"; fi
+    o+="${o:+ · }$lungo"
+  fi
+  printf '%s ' "$o"; exit 0
+fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 
@@ -138,7 +149,9 @@ riga(){   # riga <larga|stretta|minima> [senzafirma]
   [ "$1" = minima ] && m=${mac%% *}                                 # minima: la macchina senza indirizzo
   for p in "$avviso" "$m" "$modello" "$gettoni" "$tempo"; do [ -n "$p" ] && o+=" · $p"; done
   if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
-  if [ "${2:-}" != senzafirma ]; then
+  if [ "$RIGA1" = 1 ]; then
+    [ "${2:-}" != senzafirma ] && o+=" · $FIRMA"                    # l'interruttore dello stile sta nella seconda riga
+  elif [ "${2:-}" != senzafirma ]; then
     o+=" · $FIRMA"
     case "$1" in
       larga)   o+=" · ✎ per la mod: iacopo off | on (ora $stile)" ;;
