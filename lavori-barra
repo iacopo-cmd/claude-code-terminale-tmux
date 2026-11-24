@@ -123,9 +123,10 @@ except Exception: pass
 print(ses, lav, tut)
 PY
   )
-  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ tempo vero di lavoro:  questa sessione $(dur "$a_sess")  ·  questo lavoro $(dur "$a_lav")  ·  tutti i lavori $(dur "$a_tut")   (le pause di piu' di 1 minuto non contano)"
+  # stessa forma della prima riga: voci separate da " · ", dal piccolo al grande
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero · sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut") · senza le pause oltre 1 minuto"
 fi
-if [ "$TEMPI" = 1 ]; then printf '%s ' "$attivo"; exit 0; fi
+if [ "$TEMPI" = 1 ]; then printf '%*s%s ' $(( ${#s} + 2 )) "" "$attivo"; exit 0; fi   # rientro: parte sotto la macchina
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 

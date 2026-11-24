@@ -267,7 +267,7 @@ Sotto c'è una **seconda riga** con il **tempo vero di lavoro**, calcolato dagli
 messaggi, le risposte e i passi di Claude): le pause di più di 1 minuto in cui nessuno scrive non contano.
 
 ```
-✍ tempo vero di lavoro:  questa sessione 0h05m  ·  questo lavoro 1h18m  ·  tutti i lavori 81h29m
+✍ lavoro vero · sessione 0h05m · questo lavoro 1h18m · tutti i lavori 81h29m · senza le pause oltre 1 minuto
 ```
 
 Il ⏱ della prima riga invece è il tempo di apertura della sessione: riparte da zero a ogni sessione nuova e corre
