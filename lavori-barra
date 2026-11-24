@@ -61,7 +61,7 @@ if [ -n "$cart" ]; then
       while IFS= read -r caro; do
         caro=${caro%%#*}; caro=${caro//[[:space:]]/}; [ -n "$caro" ] || continue
         [[ "$mid" == *"$caro"* ]] && { icona="💰"; break; }
-      done < <(cat "${LAVORI_DIR:-/etc/lavori}/modelli-a-pagamento" 2>/dev/null)
+      done < <(cat "${IDX%/*}/modelli-a-pagamento" 2>/dev/null)
       modello="$icona $bello"
     fi
   fi
