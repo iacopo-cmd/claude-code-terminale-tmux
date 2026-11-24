@@ -306,7 +306,7 @@ barra() {   # barra <sessione>: la scritta nella barra in basso, accanto al nome
     tmux set-option -t "=$sess:" 'status-format[0]' "$(tmux show -gv 'status-format[0]' 2>/dev/null)" 2>/dev/null || true
     tmux set-option -t "=$sess:" 'status-format[1]' "#[align=left] #($cmd --tempi #{session_name}$firma)" 2>/dev/null || true
     tmux set-option -t "=$sess:" status-left-length 220 2>/dev/null || true
-    tmux set-option -t "=$sess:" status-interval 5 2>/dev/null || true   # ogni 5 s: tempo e modello quasi dal vivo
+    tmux set-option -t "=$sess:" status-interval 2 2>/dev/null || true   # ogni 2 s: modello dal vivo e lampeggio se e' Fable
     tmux set-option -t "=$sess:" status-right "" 2>/dev/null || true
     tmux set-option -w -t "=$sess:" window-status-format "" 2>/dev/null || true
     tmux set-option -w -t "=$sess:" window-status-current-format "" 2>/dev/null || true

@@ -50,7 +50,7 @@ tempo=""
 creato=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>/dev/null | awk -v n="$s" '$1==n{print $2; exit}')
 [ -n "$creato" ] && tempo="⏱ $(dur $(( $(date +%s) - creato )))"
 # 🪙 token della conversazione corrente (ultimo .jsonl della cartella del lavoro di questa sessione)
-gettoni=""; modello=""
+gettoni=""; modello=""; lampo=0
 cart=$(awk -F'\t' -v n="$s" '!/^#/ && $2==n{print $3; exit}' "$IDX" 2>/dev/null)
 if [ -n "$cart" ]; then
   key=$(printf '%s' "$cart" | sed 's/[^A-Za-z0-9]/-/g')
@@ -74,6 +74,8 @@ if [ -n "$cart" ]; then
         caro=${caro%%#*}; caro=${caro//[[:space:]]/}; [ -n "$caro" ] || continue
         [[ "$mid" == *"$caro"* ]] && { icona="💰"; break; }
       done < <(cat "${IDX%/*}/modelli-a-pagamento" 2>/dev/null)
+      # Fable, di qualsiasi versione, costa un botto: sempre 💰 e in barra LAMPEGGIA (cambia colore ogni 2 secondi)
+      case "$mid" in *fable*) icona="💰"; lampo=1 ;; esac
       modello="$icona $bello"
     fi
   fi
@@ -170,5 +172,10 @@ if [[ "${larg:-}" =~ ^[0-9]+$ ]]; then
     [ $(( $(celle "$out") + ${#s} + 5 )) -le "$larg" ] && break
     out=$(riga "$misura" "${2:-}")
   done
+fi
+# il lampeggio si mette DOPO aver misurato la riga (i codici di colore di tmux non occupano posto)
+if [ "$lampo" = 1 ] && [ -n "$modello" ]; then
+  if [ $(( $(date +%s) / 2 % 2 )) -eq 0 ]; then col="#[fg=white,bg=red,bold]"; else col="#[fg=black,bg=yellow,bold]"; fi
+  out=${out/"$modello"/"$col $modello #[default]"}
 fi
 printf '%s ' "$out"
