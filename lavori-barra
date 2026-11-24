@@ -175,7 +175,9 @@ if [[ "${larg:-}" =~ ^[0-9]+$ ]]; then
 fi
 # il lampeggio si mette DOPO aver misurato la riga (i codici di colore di tmux non occupano posto)
 if [ "$lampo" = 1 ] && [ -n "$modello" ]; then
-  if [ $(( $(date +%s) / 2 % 2 )) -eq 0 ]; then col="#[fg=white,bg=red,bold]"; else col="#[fg=black,bg=yellow,bold]"; fi
+  # giro di colori, uno ogni 2 secondi; testo sempre in contrasto con lo sfondo (bianco sugli scuri, nero sui chiari)
+  giro=("fg=white,bg=red" "fg=black,bg=yellow" "fg=white,bg=magenta" "fg=black,bg=cyan" "fg=white,bg=blue" "fg=black,bg=green" "fg=black,bg=colour208" "fg=black,bg=white")
+  col="#[${giro[$(( $(date +%s) / 2 % ${#giro[@]} ))]},bold]"
   out=${out/"$modello"/"$col $modello #[default]"}
 fi
 printf '%s ' "$out"
