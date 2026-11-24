@@ -60,7 +60,8 @@ if [ -n "$cart" ]; then
     gettoni="🪙 $(nfmt "$tok")"
     # 🧠 modello: il piu' recente tra l'ultima risposta ("model":"claude-opus-5-5") e l'ultimo /model ("Set model to
     #    `Fable 5.1`"), cosi' cambia subito quando lo cambi, senza aspettare la risposta
-    ult=$(tac "$f" 2>/dev/null | grep -m1 -oE '"model":"claude-[a-z0-9-]+"|Set model to `[^`]+`')
+    ult=$(tac "$f" 2>/dev/null | grep -m1 -oE '"model":"claude-[a-z0-9-]+"|stdout>Set mode[l] to `[A-Z][a-z]+ [0-9][^`]*`')
+    ult=${ult#stdout>}     # solo il vero esito del comando /model, non la stessa frase citata in un testo
     mid=""; bello=""
     case "$ult" in
       '"model":'*) mid=$(printf '%s' "$ult" | sed -E 's/.*"(claude-[^"]+)"/\1/')
