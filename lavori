@@ -302,6 +302,8 @@ barra() {   # barra <sessione>: la scritta nella barra in basso, accanto al nome
     tmux set-option -t "=$sess:" status-left "[#{session_name}] #($cmd #{session_name}$firma)" 2>/dev/null || true
     # seconda riga (24/11): i tempi VERI di lavoro, sessione · lavoro · tutti
     tmux set-option -t "=$sess:" status 2 2>/dev/null || true
+    # la riga [0] va rimessa uguale a quella globale: impostando solo la [1] per la sessione, tmux svuota la [0]
+    tmux set-option -t "=$sess:" 'status-format[0]' "$(tmux show -gv 'status-format[0]' 2>/dev/null)" 2>/dev/null || true
     tmux set-option -t "=$sess:" 'status-format[1]' "#[align=left] #($cmd --tempi #{session_name})" 2>/dev/null || true
     tmux set-option -t "=$sess:" status-left-length 220 2>/dev/null || true
     tmux set-option -t "=$sess:" status-interval 5 2>/dev/null || true   # ogni 5 s: tempo e modello quasi dal vivo
