@@ -76,7 +76,8 @@ if [ -n "$cart" ]; then
         [[ "$mid" == *"$caro"* ]] && { icona="💰"; break; }
       done < <(cat "${IDX%/*}/modelli-a-pagamento" 2>/dev/null)
       # Fable, di qualsiasi versione, costa un botto: sempre 💰 e in barra LAMPEGGIA (cambia colore ogni 2 secondi)
-      case "$mid" in *fable*) icona="💰"; lampo=1 ;; esac
+      # Haiku, il piu' piccolo: lampeggia in bianco e nero a inversione, per ricordare di non dargli cose difficili
+      case "$mid" in *fable*) icona="💰"; lampo=1 ;; *haiku*) lampo=2 ;; esac
       modello="$icona $bello"
     fi
   fi
@@ -175,7 +176,10 @@ if [[ "${larg:-}" =~ ^[0-9]+$ ]]; then
   done
 fi
 # il lampeggio si mette DOPO aver misurato la riga (i codici di colore di tmux non occupano posto)
-if [ "$lampo" = 1 ] && [ -n "$modello" ]; then
+if [ "$lampo" = 2 ] && [ -n "$modello" ]; then
+  if [ $(( $(date +%s) / 2 % 2 )) -eq 0 ]; then col="#[fg=black,bg=white,bold]"; else col="#[fg=white,bg=black,bold]"; fi
+  out=${out/"$modello"/"$col $modello #[default]"}
+elif [ "$lampo" = 1 ] && [ -n "$modello" ]; then
   # giro di colori, uno ogni 2 secondi; la scritta e' ROSSA su tutti gli sfondi, tranne sul rosso e sull'arancione
   # (li' sarebbe illeggibile: bianca sul rosso, nera sull'arancione). Niente verde: e' il colore della barra, spariva
   giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
