@@ -1,12 +1,14 @@
 #!/bin/bash
 # lavori-barra - contenuto della barra di stato tmux (in basso), tutto su UNA riga, per default tutto acceso:
 #   MACCHINA (nome host e indirizzo) · ⏱ tempo trascorso della sessione · 🪙 token della conversazione corrente
-#   · ● sessioni aperte · ✎ come si accende/spegne l'iacopostyle e com'e' adesso · la firma
+#   · 🧠 modello in uso (💰 al posto di 🧠 se e' nella lista di quelli a pagamento) · ● sessioni aperte · ✎ come si accende/spegne l'iacopostyle e com'e' adesso · la firma
 #   e, solo quando serve, davanti a tutto: ⚠ metti a tutto schermo (il terminale e' piccolo per i pannelli)
 # Lo chiama tmux col nome sessione:  #(lavori-barra #S)      (nelle sessioni di "lavori" sta a sinistra, accanto
 # al nome: vedi la funzione "barra" in lavori).  Secondo argomento "senzafirma": toglie comando e firma.
 # Se la riga non entra nel terminale si accorcia da sola (via "aperte" e "per la mod:"); la firma non si tocca.
 # LAVORI_MACCHINA="testo" cambia la scritta della macchina, LAVORI_MACCHINA="" la toglie.
+# Modello: l'ultimo usato nella conversazione (dal .jsonl; dopo un /model si aggiorna alla prima risposta).
+# Modelli a pagamento: uno per riga (anche solo un pezzo del nome, es. fable-5-2) in $LAVORI_DIR/modelli-a-pagamento.
 # Spiegazione della leggenda: comando "aiuto".
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
@@ -43,7 +45,7 @@ if [ -n "$creato" ]; then
   tempo="⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
 fi
 # 🪙 token della conversazione corrente (ultimo .jsonl della cartella del lavoro di questa sessione)
-gettoni=""
+gettoni=""; modello=""
 cart=$(awk -F'\t' -v n="$s" '!/^#/ && $2==n{print $3; exit}' "$IDX" 2>/dev/null)
 if [ -n "$cart" ]; then
   key=$(printf '%s' "$cart" | sed 's/[^A-Za-z0-9]/-/g')
@@ -51,6 +53,17 @@ if [ -n "$cart" ]; then
   if [ -n "$f" ]; then
     tok=$(grep -hoE '"(input_tokens|output_tokens)":[0-9]+' "$f" 2>/dev/null | grep -oE '[0-9]+' | awk '{s+=$1} END{printf "%d", s+0}')
     gettoni="🪙 $(nfmt "$tok")"
+    # 🧠 modello dell'ultima risposta (claude-opus-5-5 -> Opus 5.5)
+    mid=$(tac "$f" 2>/dev/null | grep -m1 -oE '"model":"claude-[a-z0-9-]+"' | sed -E 's/.*"(claude-[^"]+)"/\1/')
+    if [ -n "$mid" ]; then
+      bello=$(printf '%s' "${mid#claude-}" | sed -E 's/-([0-9]+)-([0-9]+)$/ \1.\2/; s/-([0-9]+)$/ \1/; s/^./\u&/')
+      icona="🧠"
+      while IFS= read -r caro; do
+        caro=${caro%%#*}; caro=${caro//[[:space:]]/}; [ -n "$caro" ] || continue
+        [[ "$mid" == *"$caro"* ]] && { icona="💰"; break; }
+      done < <(cat "${LAVORI_DIR:-/etc/lavori}/modelli-a-pagamento" 2>/dev/null)
+      modello="$icona $bello"
+    fi
   fi
 fi
 # ● sessioni aperte adesso
@@ -59,7 +72,7 @@ na=$(tmux list-sessions 2>/dev/null | grep -c .)
 # la riga, in due misure: larga, e stretta se la larga non entra nel terminale
 riga(){   # riga <larga|stretta>
   local o="" p
-  for p in "$avviso" "$mac" "$tempo" "$gettoni"; do [ -n "$p" ] && o+=" · $p"; done
+  for p in "$avviso" "$mac" "$tempo" "$gettoni" "$modello"; do [ -n "$p" ] && o+=" · $p"; done
   if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
   if [ "${2:-}" != senzafirma ]; then
     if [ "$1" = larga ]; then o+=" · ✎ per la mod: iacopo off | on (ora $stile)"; else o+=" · ✎ iacopo off | on (ora $stile)"; fi
