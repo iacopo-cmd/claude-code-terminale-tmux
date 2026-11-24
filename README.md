@@ -252,12 +252,15 @@ Nelle sessioni aperte con `lavori` la barra in basso è tutta su **una riga**, a
 sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
 
 ```
-[MioLavoro] mioserver 203.0.113.10 · ⏱ 0h23m · 🪙 367k · ● 2 aperte · ✎ per la mod: iacopo off | on (ora on) · Iacopo, 6 novembre 2026
+[MioLavoro] mioserver 203.0.113.10 · ⏱ 0h23m · 🪙 367k · 🧠 Opus 5.5 · ● 2 aperte · ✎ per la mod: iacopo off | on (ora on) · Iacopo, 6 novembre 2026
 ```
 
 - **la macchina**: nome host e indirizzo, per non sbagliare macchina quando ne hai più d'una aperta
   (`LAVORI_MACCHINA="testo"` la cambia, `LAVORI_MACCHINA=""` la toglie);
-- ⏱ tempo della sessione · 🪙 token della conversazione corrente · ● sessioni aperte;
+- ⏱ tempo della sessione · 🪙 token della conversazione corrente · 🧠 modello in uso · ● sessioni aperte;
+  il modello cambia subito quando usi `/model` (la barra si aggiorna ogni 5 secondi). I modelli che per te sono a
+  pagamento escono con 💰 invece di 🧠: scrivili uno per riga (basta un pezzo del nome, es. `fable-5-2`) in
+  `/etc/lavori/modelli-a-pagamento`;
 - il comando della mod con lo stato di adesso, e la firma.
 
 Se il terminale è stretto la riga si accorcia da sola (via «aperte» e «per la mod:»); la firma non si tocca. Quando
