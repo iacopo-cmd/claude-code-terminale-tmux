@@ -298,7 +298,11 @@ barra() {   # barra <sessione>: la scritta nella barra in basso, accanto al nome
     # La scrive lavori-barra (si accorcia da sola se il terminale e' stretto); a destra non resta niente,
     # e l'elenco delle finestre (ce n'e' sempre una sola) si toglie per lasciarle il posto.
     local firma=""; [ -n "$FIRMA" ] || firma=" senzafirma"
-    tmux set-option -t "=$sess:" status-left "[#{session_name}] #(/usr/local/bin/lavori-barra #{session_name}$firma)" 2>/dev/null || true
+    local cmd=/usr/local/bin/lavori-barra
+    tmux set-option -t "=$sess:" status-left "[#{session_name}] #($cmd #{session_name}$firma)" 2>/dev/null || true
+    # seconda riga (24/11): i tempi VERI di lavoro, sessione · lavoro · tutti
+    tmux set-option -t "=$sess:" status 2 2>/dev/null || true
+    tmux set-option -t "=$sess:" 'status-format[1]' "#[align=left] #($cmd --tempi #{session_name})" 2>/dev/null || true
     tmux set-option -t "=$sess:" status-left-length 220 2>/dev/null || true
     tmux set-option -t "=$sess:" status-interval 5 2>/dev/null || true   # ogni 5 s: tempo e modello quasi dal vivo
     tmux set-option -t "=$sess:" status-right "" 2>/dev/null || true

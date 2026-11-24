@@ -5,12 +5,15 @@
 #   e, solo quando serve, davanti a tutto: ⚠ metti a tutto schermo (il terminale e' piccolo per i pannelli)
 # Lo chiama tmux col nome sessione:  #(lavori-barra #S)      (nelle sessioni di "lavori" sta a sinistra, accanto
 # al nome: vedi la funzione "barra" in lavori).  Secondo argomento "senzafirma": toglie comando e firma.
-# Se la riga non entra nel terminale si accorcia da sola (via "aperte" e "per la mod:"); la firma non si tocca.
+# Se la riga non entra nel terminale si accorcia da sola (via "aperte", "per la mod:", poi l'indirizzo); la firma mai.
+# ✍ = tempo VERO di lavoro (buchi di piu' di 60 s senza scambi non contano): sessione · lavoro · tutti i lavori.
 # LAVORI_MACCHINA="testo" cambia la scritta della macchina, LAVORI_MACCHINA="" la toglie.
 # Modello: l'ultimo usato nella conversazione (dal .jsonl; dopo un /model si aggiorna alla prima risposta).
 # Modelli a pagamento: uno per riga (anche solo un pezzo del nome, es. fable-5-2) in $LAVORI_DIR/modelli-a-pagamento.
 # Spiegazione della leggenda: comando "aiuto".
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in caratteri e non in byte
+TEMPI=0; [ "${1:-}" = --tempi ] && { TEMPI=1; shift; }   # --tempi: stampa solo la seconda riga (tempi veri)
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
@@ -37,13 +40,12 @@ if [ -z "${LAVORI_MACCHINA+x}" ]; then
   ind=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
   mac="$(hostname)${ind:+ $ind}"
 else mac=$LAVORI_MACCHINA; fi
-# ⏱ tempo trascorso della sessione
+# ⏱ tempo di apertura della sessione (riparte da zero a ogni sessione nuova)
+dur(){ local d=${1:-0}; [ "$d" -lt 0 ] && d=0
+  if [ "$d" -ge 360000 ]; then printf '%dh' $((d/3600)); else printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)); fi; }
 tempo=""
 creato=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>/dev/null | awk -v n="$s" '$1==n{print $2; exit}')
-if [ -n "$creato" ]; then
-  d=$(( $(date +%s) - creato )); [ "$d" -lt 0 ] && d=0
-  tempo="⏱ $(printf '%dh%02dm' $((d/3600)) $(((d%3600)/60)))"
-fi
+[ -n "$creato" ] && tempo="⏱ $(dur $(( $(date +%s) - creato )))"
 # 🪙 token della conversazione corrente (ultimo .jsonl della cartella del lavoro di questa sessione)
 gettoni=""; modello=""
 cart=$(awk -F'\t' -v n="$s" '!/^#/ && $2==n{print $3; exit}' "$IDX" 2>/dev/null)
@@ -73,21 +75,84 @@ if [ -n "$cart" ]; then
     fi
   fi
 fi
+# ✍ tempo VERO di lavoro: dagli orari della conversazione (tuoi messaggi, risposte e passi di Claude). Un buco di piu'
+#   di 60 secondi in cui nessuno scrive NON conta. Tre conti: questa sessione, questo lavoro (tutte le sue
+#   conversazioni), tutti i lavori dell'indice. Cache per file in <cartella dei dati>/attivo.cache: si rilegge solo
+#   la parte nuova dei file che crescono, cosi' ogni 5 secondi costa poco.
+attivo=""
+if [ "$TEMPI" = 1 ] && [ -n "$cart" ] && command -v python3 >/dev/null; then
+  mapfile -t tutte < <(awk -F'\t' '!/^#/ && $3!=""{print $3}' "$IDX" 2>/dev/null)
+  read -r a_sess a_lav a_tut < <(python3 -I - "$PROG" "$key" "${creato:-0}" "${IDX%/*}/attivo.cache" "${tutte[@]}" <<'PY' 2>/dev/null
+import sys, os, re, json, glob, datetime
+prog, key, creato, cache = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0), sys.argv[4]
+cartelle = sys.argv[5:]
+BUCO = 60
+RE = re.compile(rb'"timestamp":"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)')
+def sec(b):
+    return int(datetime.datetime.strptime(b.decode(), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp())
+try: C = json.load(open(cache))
+except Exception: C = {}
+def conto(f, da=0):
+    """secondi attivi del file; da>0 = solo da quell'ora in poi (niente cache)"""
+    st = os.stat(f)
+    c = C.get(f) if not da else None
+    if c and c["dim"] <= st.st_size and c["mt"] <= st.st_mtime:
+        pos, tot, ult = c["dim"], c["tot"], c["ult"]
+    else:
+        pos, tot, ult = 0, 0, 0
+    if pos < st.st_size:
+        with open(f, "rb") as h:
+            h.seek(pos); dati = h.read()
+        fine = dati.rfind(b"\n") + 1           # solo righe complete
+        for m in RE.finditer(dati[:fine]):
+            t = sec(m.group(1))
+            if da and t < da: continue
+            if ult and 0 < t - ult <= BUCO: tot += t - ult
+            if t > ult: ult = t
+        pos += fine
+    if not da: C[f] = {"dim": pos, "mt": st.st_mtime, "tot": tot, "ult": ult}
+    return tot
+def cartella(k): return glob.glob(os.path.join(prog, k, "*.jsonl"))
+chiave = lambda c: re.sub(r"[^A-Za-z0-9]", "-", c)
+lav = sum(conto(f) for f in cartella(key))
+tut = sum(conto(f) for k in sorted({chiave(c) for c in cartelle}) for f in cartella(k))
+ses = sum(conto(f, creato) for f in cartella(key) if os.stat(f).st_mtime >= creato) if creato else 0
+try:
+    tmp = cache + ".nuovo"; json.dump(C, open(tmp, "w")); os.replace(tmp, cache)
+except Exception: pass
+print(ses, lav, tut)
+PY
+  )
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ tempo vero di lavoro:  questa sessione $(dur "$a_sess")  ·  questo lavoro $(dur "$a_lav")  ·  tutti i lavori $(dur "$a_tut")   (le pause di piu' di 1 minuto non contano)"
+fi
+if [ "$TEMPI" = 1 ]; then printf '%s ' "$attivo"; exit 0; fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 
-# la riga, in due misure: larga, e stretta se la larga non entra nel terminale
-riga(){   # riga <larga|stretta>
-  local o="" p
-  for p in "$avviso" "$mac" "$tempo" "$gettoni" "$modello"; do [ -n "$p" ] && o+=" · $p"; done
+# la riga, in tre misure: larga, stretta, minima; si usa la piu' larga che entra nel terminale
+riga(){   # riga <larga|stretta|minima> [senzafirma]
+  local o="" p m=$mac t=$tempo
+  [ "$1" = minima ] && m=${mac%% *}                                 # minima: la macchina senza indirizzo
+  for p in "$avviso" "$m" "$t" "$gettoni" "$modello"; do [ -n "$p" ] && o+=" · $p"; done
   if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
   if [ "${2:-}" != senzafirma ]; then
-    if [ "$1" = larga ]; then o+=" · ✎ per la mod: iacopo off | on (ora $stile)"; else o+=" · ✎ iacopo off | on (ora $stile)"; fi
+    case "$1" in
+      larga)   o+=" · ✎ per la mod: iacopo off | on (ora $stile)" ;;
+      stretta) o+=" · ✎ iacopo off|on ($stile)" ;;
+      *)       o+=" · ✎ $stile" ;;
+    esac
     o+=" · $FIRMA"
   else o+=" · iacopostyle $stile"; fi
   printf '%s' "${o# · }"
 }
+# celle occupate: i caratteri piu' uno per ogni simbolo largo (le emoji prendono due colonne)
+celle(){ local x=$1 e; e=$(printf '%s' "$x" | grep -o '[⏱✍🪙🧠💰●✎⚠]' | wc -l); echo $(( ${#x} + e )); }
 out=$(riga larga "${2:-}")
 # spazio a disposizione: larghezza del terminale meno "[nome sessione] " e un margine
-if [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( ${#out} + ${#s} + 6 )) -gt "$larg" ]; then out=$(riga stretta "${2:-}"); fi
+if [[ "${larg:-}" =~ ^[0-9]+$ ]]; then
+  for misura in stretta minima; do
+    [ $(( $(celle "$out") + ${#s} + 5 )) -le "$larg" ] && break
+    out=$(riga "$misura" "${2:-}")
+  done
+fi
 printf '%s ' "$out"

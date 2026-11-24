@@ -263,6 +263,17 @@ sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
   `/etc/lavori/modelli-a-pagamento`;
 - il comando della mod con lo stato di adesso, e la firma.
 
+Sotto c'è una **seconda riga** con il **tempo vero di lavoro**, calcolato dagli orari della conversazione (i tuoi
+messaggi, le risposte e i passi di Claude): le pause di più di 1 minuto in cui nessuno scrive non contano.
+
+```
+✍ tempo vero di lavoro:  questa sessione 0h05m  ·  questo lavoro 1h18m  ·  tutti i lavori 81h29m
+```
+
+Il ⏱ della prima riga invece è il tempo di apertura della sessione: riparte da zero a ogni sessione nuova e corre
+anche quando non fai niente. Lo storico delle aperture resta in `lavori ore`. I conti si tengono in una cache
+(`attivo.cache` nella cartella dei dati), così ogni 5 secondi si rilegge solo la parte nuova delle conversazioni.
+
 Se il terminale è stretto la riga si accorcia da sola (via «aperte» e «per la mod:»); la firma non si tocca. Quando
 il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida `plancia`),
 davanti a tutto compare `⚠ metti a tutto schermo (ora 100x25)`; sparisce da solo quando lo allarghi.
