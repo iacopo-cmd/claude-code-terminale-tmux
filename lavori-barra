@@ -176,8 +176,8 @@ fi
 # il lampeggio si mette DOPO aver misurato la riga (i codici di colore di tmux non occupano posto)
 if [ "$lampo" = 1 ] && [ -n "$modello" ]; then
   # giro di colori, uno ogni 2 secondi; la scritta e' ROSSA su tutti gli sfondi, tranne sul rosso e sull'arancione
-  # (li' sarebbe illeggibile: bianca sul rosso, nera sull'arancione)
-  giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=red,bg=green" "fg=black,bg=colour208" "fg=red,bg=white")
+  # (li' sarebbe illeggibile: bianca sul rosso, nera sull'arancione). Niente verde: e' il colore della barra, spariva
+  giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
   col="#[${giro[$(( $(date +%s) / 2 % ${#giro[@]} ))]},bold]"
   out=${out/"$modello"/"$col $modello #[default]"}
 fi

@@ -259,7 +259,7 @@ sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
   (`LAVORI_MACCHINA="testo"` la cambia, `LAVORI_MACCHINA=""` la toglie);
 - ⏱ tempo della sessione · 🪙 token della conversazione corrente · 🧠 modello in uso · ● sessioni aperte;
   il modello cambia subito quando usi `/model` (la barra si aggiorna ogni 2 secondi). Se il modello è un **Fable**,
-  di qualsiasi versione, la voce lampeggia: cambia colore ogni 2 secondi (un giro di otto colori di sfondo, con la scritta rossa; sul rosso e sull'arancione la scritta è bianca o nera), per ricordarti che costa. I modelli che per te sono a
+  di qualsiasi versione, la voce lampeggia: cambia colore ogni 2 secondi (un giro di sette colori di sfondo, con la scritta rossa; sul rosso e sull'arancione la scritta è bianca o nera), per ricordarti che costa. I modelli che per te sono a
   pagamento escono con 💰 invece di 🧠: scrivili uno per riga (basta un pezzo del nome, es. `fable-5-2`) in
   `/etc/lavori/modelli-a-pagamento`;
 - il comando della mod con lo stato di adesso, e la firma.
