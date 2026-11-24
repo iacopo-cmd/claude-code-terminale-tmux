@@ -252,7 +252,7 @@ Nelle sessioni aperte con `lavori` la barra in basso è tutta su **una riga**, a
 sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
 
 ```
-[MioLavoro] mioserver 203.0.113.10 · ⏱ 0h23m · 🪙 367k · 🧠 Opus 5.5 · ● 2 aperte · ✎ per la mod: iacopo off | on (ora on) · Iacopo, 6 novembre 2026
+[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 🪙 367k · ⏱ 0h23m · ● 2 aperte · Iacopo, 6 novembre 2026 · ✎ per la mod: iacopo off | on (ora on)
 ```
 
 - **la macchina**: nome host e indirizzo, per non sbagliare macchina quando ne hai più d'una aperta

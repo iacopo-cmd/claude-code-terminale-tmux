@@ -131,17 +131,19 @@ na=$(tmux list-sessions 2>/dev/null | grep -c .)
 
 # la riga, in tre misure: larga, stretta, minima; si usa la piu' larga che entra nel terminale
 riga(){   # riga <larga|stretta|minima> [senzafirma]
-  local o="" p m=$mac t=$tempo
+  # ordine (voluto da Iacopo, 24/11): prima la sostanza, lo stile per ultimo ->
+  #   macchina · modello · token · tempo · sessioni aperte · firma · interruttore dell'iacopostyle
+  local o="" p m=$mac
   [ "$1" = minima ] && m=${mac%% *}                                 # minima: la macchina senza indirizzo
-  for p in "$avviso" "$m" "$t" "$gettoni" "$modello"; do [ -n "$p" ] && o+=" · $p"; done
+  for p in "$avviso" "$m" "$modello" "$gettoni" "$tempo"; do [ -n "$p" ] && o+=" · $p"; done
   if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
   if [ "${2:-}" != senzafirma ]; then
+    o+=" · $FIRMA"
     case "$1" in
       larga)   o+=" · ✎ per la mod: iacopo off | on (ora $stile)" ;;
       stretta) o+=" · ✎ iacopo off|on ($stile)" ;;
       *)       o+=" · ✎ $stile" ;;
     esac
-    o+=" · $FIRMA"
   else o+=" · iacopostyle $stile"; fi
   printf '%s' "${o# · }"
 }
