@@ -248,8 +248,8 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di quattro righe** su fondo scuro: ogni riga ha
-un'etichetta colorata a sinistra, le parole di contorno in grigio e i valori in bianco (la imposta `lavori` stesso,
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di quattro righe** su fondo blu notte: ogni riga ha
+un'etichetta colorata a sinistra, le parole di contorno in azzurro tenue e i valori in color crema (la imposta `lavori` stesso,
 e resta anche con la mod spenta):
 
 ```

@@ -205,7 +205,8 @@ fi
 soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotondati
 # --- il pannello: colori di tmux (#[...]), non occupano posto. Fondo scuro (lo mette "lavori"), etichetta colorata,
 #     parole di contorno in grigio, valori in bianco grassetto, separatore sottile.
-G='#[fg=colour246,nobold]'; V='#[fg=colour231,bold]'; Z='#[default]'; SEP=" #[fg=colour240,nobold]│$Z "
+# Colori (28/11, il grigio e bianco affaticava): fondo blu notte, parole in azzurro tenue, valori in crema caldo
+G='#[fg=colour110,nobold]'; V='#[fg=colour229,bold]'; Z='#[default]'; SEP=" #[fg=colour61,nobold]│$Z "
 etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-9s#[default] ' "$1" "$2"; }        # etichetta <colore> <nome>
 voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola grigia> <valore bianco>
 perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
@@ -223,7 +224,7 @@ fi
 if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanto ne resta
   p_mod=""
   if [ -n "$modello" ]; then
-    col="fg=colour231,bold"
+    col="fg=colour229,bold"
     if [ "$lampo" = 1 ]; then    # Fable: giro di colori ogni 2 secondi (scritta rossa, tranne su rosso e arancione)
       giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
       col="${giro[$(( $(date +%s) / 2 % ${#giro[@]} ))]},bold"

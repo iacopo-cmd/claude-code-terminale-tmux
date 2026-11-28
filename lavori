@@ -299,7 +299,7 @@ barra() {   # barra <sessione>: il pannello in basso, quattro righe. C'e' sempre
     local firma=""; [ -n "$FIRMA" ] || firma=" senzafirma"
     local cmd=/usr/local/bin/lavori-barra
     tmux set-option -t "=$sess:" status 4 2>/dev/null || true
-    tmux set-option -t "=$sess:" status-style "bg=colour235,fg=colour246" 2>/dev/null || true
+    tmux set-option -t "=$sess:" status-style "bg=colour17,fg=colour110" 2>/dev/null || true
     for riga in --riga1 --modello --conti --tempi; do
         tmux set-option -t "=$sess:" "status-format[$n]" "#[align=left]#($cmd $riga #{session_name}$firma)" 2>/dev/null || true
         n=$((n+1))
