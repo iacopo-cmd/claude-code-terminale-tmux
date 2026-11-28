@@ -205,32 +205,32 @@ PY
   [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero (senza le pause): sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut")"
 fi
 soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotondati
-# --- il pannello: colori di tmux (#[...]), non occupano posto. Fondo blu notte (lo mette "lavori"), etichetta
-#     colorata, parole in azzurro tenue, valori in crema grassetto, separatore sottile.
-#     REGOLA (Iacopo, 28/11): ogni voce deve dire DA SOLA cosa e': niente sigle, niente numeri senza dire se e'
-#     usato o rimasto, le durate scritte "13 min" / "1 h 38 min".
-# Ogni RIGA ha il suo colore di fondo, intero da sinistra a destra, diverso dalle altre (28/11: le strisce per voce
-# facevano confusione). Dentro la riga le voci sono separate da una barretta; parole in sabbia, valori in crema.
-# 28/11 sera: NIENTE segni grafici tra le voci (barrette, puntini, matite): a separarle e' il COLORE della scritta,
-# diverso tra voci vicine. Dentro una voce le parole sono normali e il valore in grassetto, dello stesso colore.
-G='@G@'; V='@V@'; Z='@G@'            # segnaposto: fila() ci mette il colore della voce
-TINTE=(colour229 colour159 colour225 colour193)             # crema, celeste chiaro, rosa chiaro, verde chiaro
-FONDO=colour17                                              # lo imposta ogni riga prima di scrivere
-# Scritte tutte in MAIUSCOLO (28/11, prova di Iacopo); restano come sono solo i comandi da digitare e il nome della
-# macchina, messi tra P1 e P2. LAVORI_MAIUSCOLO=0 torna al minuscolo.
+# --- il pannello. REGOLA DEI COLORI (Iacopo, 28/11: "dal colore capisco"): il colore di un valore dice CHE COSA E',
+#     sempre lo stesso in tutte le righe. Il fondo e' scuro e uguale per tutti, cosi' i colori si leggono.
+#       crema      = un nome o un dato fisso (macchina, modello, lavoro, data)
+#       azzurro    = un TEMPO (durate, orari)
+#       verde      = quello che RESTA, che hai ancora
+#       verde/giallo/rosso = quello che hai CONSUMATO: verde poco, giallo dal 60%, rosso dall'80%
+#       oro        = SOLDI
+#       arancione  = un COMANDO che puoi digitare
+#       rosso      = un allarme
+#     Le parole di contorno sono color sabbia, non in grassetto. Niente segni grafici tra le voci: quattro spazi.
+W='#[fg=colour180,nobold]'                                   # parole di contorno
+FONDO=colour234                                              # lo imposta ogni riga prima di scrivere
+# I comandi da digitare e il nome della macchina stanno tra P1 e P2: con LAVORI_MAIUSCOLO=1 (tutto maiuscolo) restano
+# come sono. Di norma le scritte hanno solo l'iniziale maiuscola.
 P1=$'\x01'; P2=$'\x02'
 esci(){ if [ "${LAVORI_MAIUSCOLO:-0}" = 1 ]; then sed -E "s/(#\[[^]]*\])|($P1[^$P2]*$P2)|([^#$P1]+)/\1\2\U\3\E/g" | tr -d "$P1$P2"; else tr -d "$P1$P2"; fi; }
+nome(){   printf '#[fg=colour230,bold]%s%s' "$1" "$W"; }
+tempo_c(){ printf '#[fg=colour117,bold]%s%s' "$1" "$W"; }
+resta(){  printf '#[fg=colour120,bold]%s%s' "$1" "$W"; }
+soldi_c(){ printf '#[fg=colour220,bold]%s%s' "$1" "$W"; }
+comando(){ printf '#[fg=colour215,bold]%s%s%s%s' "$P1" "$1" "$P2" "$W"; }
+allarme(){ printf '#[fg=colour203,bold]%s%s' "$1" "$W"; }
+usato(){  local c=colour120; [ "$1" -ge 60 ] && c=colour220; [ "$1" -ge 80 ] && c=colour203
+          printf '#[fg=%s,bold]%s%%%s' "$c" "$1" "$W"; }
 etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-11s#[bg=%s] ' "$1" "$2" "$FONDO"; }   # etichetta <colore> <nome>
-voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola> <valore>
-perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
-        printf '#[fg=%s,bold]%s%%%s' "$c" "$1" "$Z"; }
-fila(){ local o="" x i=0 c    # le voci della riga, ognuna col suo colore; @B@ = "torna al fondo della riga"
-  for x in "$@"; do
-    [ -n "$x" ] || continue
-    c=${TINTE[$(( i % ${#TINTE[@]} ))]}; i=$((i+1))
-    x=${x//@B@/#[bg=$FONDO]}; x=${x//@G@/#[fg=$c,nobold]}; x=${x//@V@/#[fg=$c,bold]}
-    o+="${o:+   }#[fg=$c,nobold]$x"
-  done; printf '%s' "$o"; }
+fila(){ local o="" x; for x in "$@"; do [ -n "$x" ] && o+="${o:+    }$W${x//@B@/#[bg=$FONDO]}"; done; printf '%s' "$o"; }
 chiaro(){ local d=${1:-0} h m; [ "$d" -lt 0 ] && d=0; h=$((d/3600)); m=$(((d%3600)/60))   # durata in parole
   local ore=ore; [ "$h" = 1 ] && ore=ora
   if   [ "$h" -ge 100 ]; then printf '%d ore' "$h"
@@ -244,80 +244,84 @@ milioni(){ local n=${1:-0}                                                      
 adesso=$(date +%s)
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
-  p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour221,bold] $avviso @B@$Z"
-  p_mac=""; [ -n "$mac" ] && p_mac="$V$P1${mac%% *}$P2$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac="$V$P1$mac$P2$Z"
-  p_ap=""; [ -n "$creato" ] && p_ap=$(voce "Aperta da" "$(chiaro $((adesso-creato)))")
-  # le ALTRE sessioni aperte oltre a questa (questa non si segna: lo sai gia'); se non ce ne sono, niente
+  FONDO=colour234
+  p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour220,bold] $avviso @B@$W"
+  p_mac=""; [ -n "$mac" ] && p_mac="$(nome "$P1${mac%% *}$P2") ${mac#* }"; [ "$mac" = "${mac%% *}" ] && p_mac=$(nome "$P1$mac$P2")
+  p_lav="Se cade la linea: $(comando "lavori $s")"
+  p_ap=""; [ -n "$creato" ] && p_ap="Aperta da $(tempo_c "$(chiaro $((adesso-creato)))")"
+  # le ALTRE sessioni aperte oltre a questa (questa non si segna); coi nomi se la riga ci sta, senno' quante sono
   p_na=""; altre=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -vxF "$s" | paste -sd, | sed 's/,/, /g')
   if [ -n "$altre" ]; then
-    # coi nomi se la riga ci sta nel terminale, senno' solo quante sono
-    fisso=$(( 13 + ${#mac} + ${#s} + 118 )); [ "${2:-}" != senzafirma ] && fisso=$(( fisso + ${#FIRMA} + 3 ))
+    fisso=$(( 13 + ${#mac} + ${#s} + 118 )); [ "${2:-}" != senzafirma ] && fisso=$(( fisso + ${#FIRMA} + 4 ))
     [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( fisso + ${#altre} )) -gt "$larg" ] && altre="$(( na - 1 ))"
-    p_na="#[fg=colour221,nobold]Altre aperte:$Z #[fg=colour221,bold]$altre$Z"
+    p_na="Altre aperte: $(nome "$altre")"
   fi
-  p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
-  p_lav=$(voce "Se cade la linea:" "${P1}lavori $s$P2")
-  FONDO=colour24; printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")" | esci; exit 0
+  p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$FIRMA"
+  printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")" | esci; exit 0
 fi
 if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della chat e' piena
+  FONDO=colour236
   p_mod=""
   if [ -n "$modello" ]; then
-    col="fg=colour229,bold"; nota=""
+    col="fg=colour230,bold"; nota=""
     if [ "$lampo" = 1 ]; then    # Fable: giro di colori ogni 2 secondi (scritta rossa, tranne su rosso e arancione)
       giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
-      col="${giro[$(( adesso / 2 % ${#giro[@]} ))]},bold"; nota=" #[fg=colour216,bold]costa caro$Z"
+      col="${giro[$(( adesso / 2 % ${#giro[@]} ))]},bold"; nota=" $(allarme "costa caro")"
     elif [ "$lampo" = 2 ]; then  # Haiku: bianco e nero a inversione
       if [ $(( adesso / 2 % 2 )) -eq 0 ]; then col="fg=black,bg=white,bold"; else col="fg=white,bg=black,bold"; fi
-      nota=" ${G}modello piccolo, niente cose difficili$Z"
+      nota=" modello piccolo, niente cose difficili"
     fi
-    p_mod="${G}Stai usando$Z #[$col] ${modello#* } @B@$Z$nota"
+    p_mod="Stai usando #[$col] ${modello#* } @B@$W$nota"
   fi
-  p_ctx=""
+  p_ctx=""; p_lib=""
   if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
-    p_ctx="${G}Memoria della chat piena al$Z $(perc "$c_perc")"
-    if [ "$c_perc" -ge 80 ]; then p_ctx+=" #[fg=colour203,bold]Quasi piena: fai ${P1}/compact$P2$Z"
-    else p_lib=$(voce "Resta libero il" "$((100-c_perc))%"); fi
+    p_ctx="Memoria della chat piena al $(usato "$c_perc")"
+    if [ "$c_perc" -ge 80 ]; then p_lib="$(allarme "Quasi piena:") fai $(comando /compact)"
+    else p_lib="Resta libero il $(resta "$((100-c_perc))%")"; fi
   fi
-  FONDO=colour53; printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "${p_lib:-}")" | esci; exit 0
+  printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "$p_lib")" | esci; exit 0
 fi
 if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, quanto resta, quando si azzera
+  FONDO=colour234
   GG=(dom lun mar mer gio ven sab)
   limite(){   # limite <nome> <percentuale usata> <ora di azzeramento> <corto|lungo>
-    local nome=$1 u=$2 fine=$3 o
-    if ! [[ "$u" =~ ^[0-9]+$ ]]; then printf '%s%s: dato non disponibile adesso%s' "$G" "$nome" "$Z"; return; fi
-    o="$G$nome: usato$Z $(perc "$u")$G, resta$Z $V$((100-u))%$Z"
+    local n=$1 u=$2 fine=$3 o
+    if ! [[ "$u" =~ ^[0-9]+$ ]]; then printf '%s: dato non disponibile adesso' "$n"; return; fi
+    o="$(nome "$n:") usato $(usato "$u"), resta $(resta "$((100-u))%")"
     if [[ "$fine" =~ ^[0-9]+$ ]] && [ "$fine" -gt "$adesso" ]; then
       if [ "$4" = corto ]; then
-        o+="$G, si azzera alle$Z $V$(date -d "@$fine" +%H:%M)$Z"
-        [ $((fine-adesso)) -lt 3600 ] && o+="$G, tra $(chiaro $((fine-adesso)))$Z"       # il "tra quanto" solo sotto l'ora
-      else o+="$G, si azzera$Z $V${GG[$(date -d "@$fine" +%w)]} $(date -d "@$fine" +%d/%m)$Z ${G}alle$Z $V$(date -d "@$fine" +%H:%M)$Z"; fi
+        o+=", si azzera alle $(tempo_c "$(date -d "@$fine" +%H:%M)")"
+        [ $((fine-adesso)) -lt 3600 ] && o+=", tra $(tempo_c "$(chiaro $((fine-adesso)))")"       # il "tra quanto" solo sotto l'ora
+      else o+=", si azzera $(tempo_c "${GG[$(date -d "@$fine" +%w)]} $(date -d "@$fine" +%d/%m) alle $(date -d "@$fine" +%H:%M)")"; fi
     fi
     printf '%s' "$o"; }
   if [ -s "$CJ" ]; then
-    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "Settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")" | esci
+    printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "Settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")" | esci
   else
-    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "I limiti compaiono dopo la prima risposta di Claude")" | esci
+    printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "I limiti compaiono dopo la prima risposta di Claude")" | esci
   fi
   exit 0
 fi
 if [ "$CONTI" = 1 ]; then      # COSTO: quanto varrebbe il lavoro pagando a consumo (listino API)
+  FONDO=colour236
   ses_usd=${c_costo:-${e_ses:-}}                         # il costo della sessione lo da' Claude Code; se manca, il nostro conto
   # il lavoro dalle conversazioni salvate (se Claude Code le ha compattate la storia vecchia puo' mancare):
   # non scende mai sotto la sessione
   [ -n "${e_lav:-}" ] && [ -n "$ses_usd" ] && e_lav=$(awk -v a="$e_lav" -v b="$ses_usd" 'BEGIN{printf "%.2f", (b>a)?b:a}')
-  p_ses=""; [ -n "$ses_usd" ] && p_ses=$(voce "questa sessione" "$(soldi "$ses_usd")")
-  p_lav=""; [ -n "${e_lav:-}" ] && p_lav=$(voce "Tutto il lavoro circa" "$(soldi "$e_lav")")
-  p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "Di cui sottoagenti" "$(soldi "$e_ag")")
-  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "Token del lavoro" "$(milioni "$t_lav")")
-  p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}Righe:$Z #[fg=colour114,bold]$c_add aggiunte$Z$G,$Z #[fg=colour203,bold]${c_tol:-0} tolte$Z"
-  FONDO=colour94; printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "${G}Pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")" | esci; exit 0
+  p_ses=""; [ -n "$ses_usd" ] && p_ses="A consumo: questa sessione $(soldi_c "$(soldi "$ses_usd")")"
+  p_lav=""; [ -n "${e_lav:-}" ] && p_lav="Tutto il lavoro circa $(soldi_c "$(soldi "$e_lav")")"
+  p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag="Di cui sottoagenti $(soldi_c "$(soldi "$e_ag")")"
+  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok="Token del lavoro $(nome "$(milioni "$t_lav")")"
+  p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="Righe: $(nome "$c_add") aggiunte, $(nome "${c_tol:-0}") tolte"
+  printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "$p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")" | esci; exit 0
 fi
-if [ "$TEMPI" = 1 ]; then      # TEMPO: il lavoro vero; per ultimo l'interruttore dello stile
-  p_vero=""
-  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && { p_vero=$(voce "Senza pause: questa sessione" "$(chiaro "$a_sess")"); p_v2=$(voce "Tutto il lavoro" "$(chiaro "$a_lav")"); p_v3=$(voce "Tutti i lavori" "$(chiaro "$a_tut")"); }
+if [ "$TEMPI" = 1 ]; then      # TEMPO VERO: il lavoro senza le pause; per ultimo l'interruttore dello stile
+  FONDO=colour234
+  p_vero=""; p_v2=""; p_v3=""
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && { p_vero="Senza pause: questa sessione $(tempo_c "$(chiaro "$a_sess")")"; p_v2="Tutto il lavoro $(tempo_c "$(chiaro "$a_lav")")"; p_v3="Tutti i lavori $(tempo_c "$(chiaro "$a_tut")")"; }
   acc=spenta; [ "$stile" = on ] && acc=accesa
-  if [ "${2:-}" != senzafirma ]; then p_stile="${G}Mod$Z $V$acc$Z$G:$Z $V${P1}iacopo on | off$P2$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
-  FONDO=colour22; printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "${p_v2:-}" "${p_v3:-}" "$p_stile")" | esci; exit 0
+  if [ "${2:-}" != senzafirma ]; then p_stile="Mod $(nome "$acc"): $(comando "iacopo on | off")"; else p_stile="Mod dei pannelli $acc"; fi
+  printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "$p_v2" "$p_v3" "$p_stile")" | esci; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)

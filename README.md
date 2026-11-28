@@ -248,17 +248,27 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe**: ogni riga ha il suo colore di
-fondo, intero da sinistra a destra (blu, viola, petrolio, marrone, verde) e un'etichetta a sinistra. Tra le voci non
-ci sono segni: a separarle è il **colore della scritta**, diverso tra voci vicine. Ogni voce dice da sola cosa è,
-senza sigle e senza parentesi (lo imposta `lavori` stesso, e resta anche con la mod spenta):
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe** su fondo scuro, con
+un'etichetta a sinistra per riga. Tra le voci non ci sono segni, e ogni voce dice da sola cosa è. Il **colore di un
+valore dice che cosa è**, sempre lo stesso in tutte le righe (lo imposta `lavori` stesso, e resta anche con la mod
+spenta):
+
+| Colore | Vuol dire |
+|---|---|
+| crema | un nome o un dato fisso (macchina, modello, token) |
+| azzurro | un **tempo**: durate e orari |
+| verde | quello che **resta** |
+| verde / giallo / rosso | quello che hai **consumato**: verde poco, giallo dal 60%, rosso dall'80% |
+| oro | **soldi** |
+| arancione | un **comando** che puoi digitare |
+| rosso | un allarme |
 
 ```
- MACCHINA    mioserver 203.0.113.10   Se cade la linea: lavori MioLavoro   Aperta da 32 min   Altre aperte: server   Iacopo, 6 novembre 2026
- MODELLO     Stai usando  Opus 5.5    Memoria della chat piena al 53%   Resta libero il 47%
- ABBONAMENTO 5 ore: usato 14%, resta 86%, si azzera alle 15:10   Settimana: usato 18%, resta 82%, si azzera ven 04/12 alle 17:00
- COSTO       Pagando a consumo: questa sessione 73 $   Tutto il lavoro circa 73 $   Token del lavoro 87,7 milioni   Righe: 292 aggiunte, 24 tolte
- TEMPO VERO  Senza pause: questa sessione 15 min   Tutto il lavoro 1 ora e 45 min   Tutti i lavori 102 ore   Mod accesa: iacopo on | off
+ MACCHINA    mioserver 203.0.113.10    Se cade la linea: lavori MioLavoro    Aperta da 38 min    Altre aperte: server    Iacopo, 6 novembre 2026
+ MODELLO     Stai usando  Opus 5.5     Memoria della chat piena al 55%    Resta libero il 45%
+ ABBONAMENTO 5 ore: usato 16%, resta 84%, si azzera alle 15:10    Settimana: usato 18%, resta 82%, si azzera ven 04/12 alle 17:00
+ COSTO       A consumo: questa sessione 74 $    Tutto il lavoro circa 74 $    Token del lavoro 91,4 milioni    Righe: 292 aggiunte, 24 tolte
+ TEMPO VERO  Senza pause: questa sessione 17 min    Tutto il lavoro 1 ora e 48 min    Tutti i lavori 102 ore    Mod accesa: iacopo on | off
 ```
 
 - **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade
