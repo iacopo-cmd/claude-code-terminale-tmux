@@ -248,32 +248,36 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe** su fondo scuro, con
-un'etichetta a sinistra per riga. Tra le voci non ci sono segni, e ogni voce dice da sola cosa è. Il **colore di un
-valore dice che cosa è**, sempre lo stesso in tutte le righe (lo imposta `lavori` stesso, e resta anche con la mod
-spenta):
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe**, con un'etichetta a sinistra per
+riga. Ogni **concetto sta in un blocco suo**: un colore di fondo e un colore di scritta, tutta uguale; due blocchi
+vicini non hanno mai lo stesso fondo. Il **colore del blocco dice che cosa è**, sempre lo stesso in tutte le righe
+(lo imposta `lavori` stesso, e resta anche con la mod spenta):
 
-| Colore | Vuol dire |
+| Fondo del blocco | Vuol dire |
 |---|---|
-| crema | un nome o un dato fisso (macchina, modello, token) |
+| sabbia | un nome o un dato fisso (macchina, modello, token, firma) |
 | azzurro | un **tempo**: durate e orari |
-| verde | quello che **resta** |
-| verde / giallo / rosso | quello che hai **consumato**: verde poco, giallo dal 60%, rosso dall'80% |
+| verde chiaro | quello che **resta** |
+| verde scuro / giallo / rosso | quello che hai **consumato**: poco, dal 60%, dall'80% |
 | oro | **soldi** |
 | arancione | un **comando** che puoi digitare |
-| rosso | un allarme |
+| rosso | un allarme (per esempio il modello Fable, che costa caro) |
+
+Se due blocchi vicini hanno lo stesso significato, il secondo prende una seconda tonalità dello stesso colore.
 
 ```
- MACCHINA    mioserver 203.0.113.10    Se cade la linea: lavori MioLavoro    Aperta da 38 min    Altre aperte: server    Iacopo, 6 novembre 2026
- MODELLO     Stai usando  Opus 5.5     Memoria della chat piena al 55%    Resta libero il 45%
- ABBONAMENTO 5 ore: usato 16%, resta 84%, si azzera alle 15:10    Settimana: usato 18%, resta 82%, si azzera ven 04/12 alle 17:00
- COSTO       A consumo: questa sessione 74 $    Tutto il lavoro circa 74 $    Token del lavoro 91,4 milioni    Righe: 292 aggiunte, 24 tolte
- TEMPO VERO  Senza pause: questa sessione 17 min    Tutto il lavoro 1 ora e 48 min    Tutti i lavori 102 ore    Mod accesa: iacopo on | off
+ MACCHINA    [mioserver 203.0.113.10] [Se cade la linea: lavori MioLavoro] [Aperta da 44 min] [Altre aperte: server] [Iacopo, 6 novembre 2026]
+ MODELLO     [Stai usando Opus 5.5] [Memoria della chat piena al 55%] [Resta libero il 45%]
+ ABBONAMENTO [5 ore: usato 18%] [Resta 82%] [Si azzera alle 15:10] [Settimana: usato 18%] [Resta 82%] [Si azzera ven 04/12 alle 17:00]
+ COSTO       [A consumo: questa sessione 76 $] [Tutto il lavoro circa 76 $] [Token del lavoro 94,2 milioni] [Righe: 292 aggiunte, 24 tolte]
+ TEMPO VERO  [Senza pause: questa sessione 18 min] [Tutto il lavoro 1 ora e 49 min] [Tutti i lavori 102 ore] [Mod accesa: iacopo on | off]
 ```
+
+(Le parentesi quadre qui sopra segnano solo dove comincia e finisce ogni blocco colorato: a schermo non ci sono.)
 
 - **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade
   la linea, da quanto è aperta la sessione, le **altre** sessioni aperte oltre a questa (in giallo, coi nomi; se non ce ne sono non compare niente), la firma.
-- **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** sta in un riquadro rosso fisso con scritto «costa caro»,
+- **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** sta in un blocco rosso con scritto «costa caro»,
   un **Haiku** in bianco e nero) e quanto è piena la memoria della chat, cioè il contesto: all'80% compare
   `⚠ quasi piena: fai /compact`.
 - **ABBONAMENTO**: i due limiti, quello delle 5 ore e quello della settimana: quanto hai usato, quanto resta e quando
