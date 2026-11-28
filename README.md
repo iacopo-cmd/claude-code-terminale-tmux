@@ -250,15 +250,16 @@ niente, stampa il testo.
 ### Barra di stato tmux
 Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe**: ogni riga ha il suo colore di
 fondo, intero da sinistra a destra (blu, viola, petrolio, marrone, verde), un'etichetta a sinistra e le voci separate
-da una barretta, coi valori in color crema. Ogni voce dice da sola cosa è, senza sigle (lo imposta `lavori` stesso,
+da una barretta, coi valori in color crema. Le scritte sono in maiuscolo (`LAVORI_MAIUSCOLO=0` le rimette minuscole), tranne i comandi
+da digitare e il nome della macchina. Ogni voce dice da sola cosa è, senza sigle e senza parentesi (lo imposta `lavori` stesso,
 e resta anche con la mod spenta):
 
 ```
- MACCHINA    mioserver 203.0.113.10 │ se cade la linea: lavori MioLavoro │ aperta da 29 min │ altre aperte: server │ Iacopo, 6 novembre 2026
- MODELLO     stai usando  Opus 5.5  │ memoria della chat piena al 52% (521 mila token su 1 milione) │ resta libero il 48%
- ABBONAMENTO 5 ore: usato 12%, resta 88%, si azzera alle 15:10 │ settimana: usato 17%, resta 83%, si azzera ven 04/12 alle 17:00
- COSTO       pagando a consumo: questa sessione 71 $ │ tutto il lavoro circa 71 $ │ token del lavoro 85,0 milioni │ righe: 292 aggiunte, 24 tolte
- TEMPO VERO  senza pause: questa sessione 14 min │ tutto il lavoro 1 ora e 44 min │ tutti i lavori 102 ore │ ✎ mod accesa (iacopo on | off)
+ MACCHINA    mioserver 203.0.113.10 │ SE CADE LA LINEA: lavori MioLavoro │ APERTA DA 30 MIN │ ALTRE APERTE: server │ IACOPO, 6 NOVEMBRE 2026
+ MODELLO     STAI USANDO  OPUS 5.5  │ MEMORIA DELLA CHAT PIENA AL 53% │ RESTA LIBERO IL 47%
+ ABBONAMENTO 5 ORE: USATO 13%, RESTA 87%, SI AZZERA ALLE 15:10 │ SETTIMANA: USATO 18%, RESTA 82%, SI AZZERA VEN 04/12 ALLE 17:00
+ COSTO       PAGANDO A CONSUMO: QUESTA SESSIONE 72 $ │ TUTTO IL LAVORO CIRCA 72 $ │ TOKEN DEL LAVORO 86,1 MILIONI │ RIGHE: 292 AGGIUNTE, 24 TOLTE
+ TEMPO VERO  SENZA PAUSE: QUESTA SESSIONE 14 MIN │ TUTTO IL LAVORO 1 ORA E 45 MIN │ TUTTI I LAVORI 102 ORE │ ✎ MOD ACCESA: iacopo on | off
 ```
 
 - **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade

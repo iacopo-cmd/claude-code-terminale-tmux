@@ -213,6 +213,10 @@ soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotonda
 # facevano confusione). Dentro la riga le voci sono separate da una barretta; parole in sabbia, valori in crema.
 G='#[fg=colour187,nobold]'; V='#[fg=colour229,bold]'; Z='#[fg=colour187,nobold]'
 FONDO=colour17                                              # lo imposta ogni riga prima di scrivere
+# Scritte tutte in MAIUSCOLO (28/11, prova di Iacopo); restano come sono solo i comandi da digitare e il nome della
+# macchina, messi tra P1 e P2. LAVORI_MAIUSCOLO=0 torna al minuscolo.
+P1=$'\x01'; P2=$'\x02'
+esci(){ if [ "${LAVORI_MAIUSCOLO:-1}" = 1 ]; then sed -E "s/(#\[[^]]*\])|($P1[^$P2]*$P2)|([^#$P1]+)/\1\2\U\3\E/g" | tr -d "$P1$P2"; else tr -d "$P1$P2"; fi; }
 etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-11s#[bg=%s] ' "$1" "$2" "$FONDO"; }   # etichetta <colore> <nome>
 voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola> <valore>
 perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
@@ -236,7 +240,7 @@ adesso=$(date +%s)
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
   p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour221,bold] $avviso @B@$Z"
-  p_mac=""; [ -n "$mac" ] && p_mac="$V${mac%% *}$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac="$V$mac$Z"
+  p_mac=""; [ -n "$mac" ] && p_mac="$V$P1${mac%% *}$P2$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac="$V$P1$mac$P2$Z"
   p_ap=""; [ -n "$creato" ] && p_ap=$(voce "aperta da" "$(chiaro $((adesso-creato)))")
   # le ALTRE sessioni aperte oltre a questa (questa non si segna: lo sai gia'); se non ce ne sono, niente
   p_na=""; altre=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -vxF "$s" | paste -sd, | sed 's/,/, /g')
@@ -247,8 +251,8 @@ if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
     p_na="#[fg=colour221,nobold]altre aperte:$Z #[fg=colour221,bold]$altre$Z"
   fi
   p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
-  p_lav=$(voce "se cade la linea:" "lavori $s")
-  FONDO=colour24; printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")"; exit 0
+  p_lav=$(voce "se cade la linea:" "${P1}lavori $s$P2")
+  FONDO=colour24; printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")" | esci; exit 0
 fi
 if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della chat e' piena
   p_mod=""
@@ -265,11 +269,11 @@ if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della
   fi
   p_ctx=""
   if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
-    p_ctx="${G}memoria della chat piena al$Z $(perc "$c_perc") $G($(milioni "$c_ctx") token su $(milioni "$c_max"))$Z"
-    if [ "$c_perc" -ge 80 ]; then p_ctx+=" #[fg=colour203,bold]⚠ quasi piena: fai /compact$Z"
+    p_ctx="${G}memoria della chat piena al$Z $(perc "$c_perc")"
+    if [ "$c_perc" -ge 80 ]; then p_ctx+=" #[fg=colour203,bold]⚠ quasi piena: fai ${P1}/compact$P2$Z"
     else p_lib=$(voce "resta libero il" "$((100-c_perc))%"); fi
   fi
-  FONDO=colour53; printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "${p_lib:-}")"; exit 0
+  FONDO=colour53; printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "${p_lib:-}")" | esci; exit 0
 fi
 if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, quanto resta, quando si azzera
   GG=(dom lun mar mer gio ven sab)
@@ -280,14 +284,14 @@ if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, qua
     if [[ "$fine" =~ ^[0-9]+$ ]] && [ "$fine" -gt "$adesso" ]; then
       if [ "$4" = corto ]; then
         o+="$G, si azzera alle$Z $V$(date -d "@$fine" +%H:%M)$Z"
-        [ $((fine-adesso)) -lt 3600 ] && o+=" $G(tra $(chiaro $((fine-adesso))))$Z"       # il "tra quanto" solo sotto l'ora
+        [ $((fine-adesso)) -lt 3600 ] && o+="$G, tra $(chiaro $((fine-adesso)))$Z"       # il "tra quanto" solo sotto l'ora
       else o+="$G, si azzera$Z $V${GG[$(date -d "@$fine" +%w)]} $(date -d "@$fine" +%d/%m)$Z ${G}alle$Z $V$(date -d "@$fine" +%H:%M)$Z"; fi
     fi
     printf '%s' "$o"; }
   if [ -s "$CJ" ]; then
-    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")"
+    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")" | esci
   else
-    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "i limiti compaiono dopo la prima risposta di Claude")"
+    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "i limiti compaiono dopo la prima risposta di Claude")" | esci
   fi
   exit 0
 fi
@@ -301,14 +305,14 @@ if [ "$CONTI" = 1 ]; then      # COSTO: quanto varrebbe il lavoro pagando a cons
   p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "di cui sottoagenti" "$(soldi "$e_ag")")
   p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "token del lavoro" "$(milioni "$t_lav")")
   p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}righe:$Z #[fg=colour114,bold]$c_add aggiunte$Z$G,$Z #[fg=colour203,bold]${c_tol:-0} tolte$Z"
-  FONDO=colour94; printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "${G}pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")"; exit 0
+  FONDO=colour94; printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "${G}pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")" | esci; exit 0
 fi
 if [ "$TEMPI" = 1 ]; then      # TEMPO: il lavoro vero; per ultimo l'interruttore dello stile
   p_vero=""
   [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && { p_vero=$(voce "senza pause: questa sessione" "$(chiaro "$a_sess")"); p_v2=$(voce "tutto il lavoro" "$(chiaro "$a_lav")"); p_v3=$(voce "tutti i lavori" "$(chiaro "$a_tut")"); }
   acc=spenta; [ "$stile" = on ] && acc=accesa
-  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ mod$Z $V$acc$Z $G(${Z}${V}iacopo on | off$Z$G)$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
-  FONDO=colour22; printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "${p_v2:-}" "${p_v3:-}" "$p_stile")"; exit 0
+  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ mod$Z $V$acc$Z$G:$Z $V${P1}iacopo on | off$P2$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
+  FONDO=colour22; printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "${p_v2:-}" "${p_v3:-}" "$p_stile")" | esci; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
