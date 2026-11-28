@@ -15,8 +15,12 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in caratteri e non in byte
 # --riga1 / --tempi: la barra su DUE righe (cosi' le scritte restano intere): sopra la sostanza, sotto i tempi veri
 # di lavoro e, per ultimo, l'interruttore dello stile. Senza opzioni: tutto su una riga, come prima.
-TEMPI=0; RIGA1=0
-case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; esac
+# Tre righe (28/11), tutte scritte per intero:
+#   --riga1  dove e con cosa:  macchina · modello · contesto · abbonamento · firma
+#   --conti  quanto costa:     tempo aperta · sessioni aperte · 💶 costo · 🪙 token · 📝 righe
+#   --tempi  tempo vero:       ✍ sessione · questo lavoro · tutti i lavori · per ultimo l'interruttore dello stile
+TEMPI=0; RIGA1=0; CONTI=0
+case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; --conti) CONTI=1; shift ;; esac
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
@@ -82,65 +86,137 @@ if [ -n "$cart" ]; then
     fi
   fi
 fi
+# 📦 ⏳ i dati che Claude Code passa alla sua riga di stato (li salva avviso-tmux.sh in <dati>/claude/<sessione>.json):
+#   modello, contesto attuale e suo limite, costo e righe cambiate della sessione, limiti dell'abbonamento (5 ore, 7 giorni)
+contesto=""; limiti=""; c_costo=""; c_righe=""
+CJ="${IDX%/*}/claude/$s.json"
+if [ -s "$CJ" ] && command -v python3 >/dev/null; then
+  IFS='|' read -r c_mod c_ctx c_max c_perc c_5h c_7g c_costo c_add c_tol < <(python3 -I - "$CJ" <<'PY' 2>/dev/null
+import sys, json
+d = json.load(open(sys.argv[1])); g = lambda *k: (lambda o: [o := (o or {}).get(x) for x in k][-1])(d)
+cu = g("context_window", "current_usage") or {}
+ctx = sum(cu.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+v = [g("model", "display_name") or "", ctx, g("context_window", "context_window_size") or 0,
+     g("context_window", "used_percentage"), g("rate_limits", "five_hour", "used_percentage"),
+     g("rate_limits", "seven_day", "used_percentage"), g("cost", "total_cost_usd"),
+     g("cost", "total_lines_added"), g("cost", "total_lines_removed")]
+print("|".join("" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x)) for x in v))
+PY
+  )
+  if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
+    [[ "${c_perc:-}" =~ ^[0-9]+$ ]] || c_perc=$(( c_ctx * 100 / c_max ))
+    ic="📦"; [ "$c_perc" -ge 80 ] && ic="⚠"
+    contesto="$ic contesto $(nfmt "$c_ctx")/$(nfmt "$c_max") $c_perc%"
+  fi
+  # Claude Code a volte passa solo uno dei due limiti: si mostra quello che c'e'
+  l=""; [[ "${c_5h:-}" =~ ^[0-9]+$ ]] && l="5h $c_5h%"
+  [[ "${c_7g:-}" =~ ^[0-9]+$ ]] && l+="${l:+ · }7gg $c_7g%"
+  if [ -n "$l" ]; then
+    limiti="⏳ abbonamento $l"
+    { [ "${c_5h:-0}" -ge 80 ] || [ "${c_7g:-0}" -ge 80 ]; } && limiti="⚠ abbonamento $l"
+  fi
+  [[ "${c_add:-}" =~ ^[0-9]+$ ]] && c_righe="📝 +$c_add/-${c_tol:-0}"
+fi
 # ✍ tempo VERO di lavoro: dagli orari della conversazione (tuoi messaggi, risposte e passi di Claude). Un buco di piu'
 #   di 60 secondi in cui nessuno scrive NON conta. Tre conti: questa sessione, questo lavoro (tutte le sue
 #   conversazioni), tutti i lavori dell'indice. Cache per file in <cartella dei dati>/attivo.cache: si rilegge solo
 #   la parte nuova dei file che crescono, cosi' ogni 5 secondi costa poco.
 attivo=""
-if [ "$TEMPI" = 1 ] && [ -n "$cart" ] && command -v python3 >/dev/null; then
+if { [ "$TEMPI" = 1 ] || [ "$CONTI" = 1 ]; } && [ -n "$cart" ] && command -v python3 >/dev/null; then
   mapfile -t tutte < <(awk -F'\t' '!/^#/ && $3!=""{print $3}' "$IDX" 2>/dev/null)
-  read -r a_sess a_lav a_tut < <(python3 -I - "$PROG" "$key" "${creato:-0}" "${IDX%/*}/attivo.cache" "${tutte[@]}" <<'PY' 2>/dev/null
+  read -r a_sess a_lav a_tut t_lav e_lav e_ag e_ses < <(python3 -I - "$PROG" "$key" "${creato:-0}" "${IDX%/*}/attivo.cache" "$HOME/.claude.json" "${tutte[@]}" <<'PY' 2>/dev/null
 import sys, os, re, json, glob, datetime
-prog, key, creato, cache = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0), sys.argv[4]
-cartelle = sys.argv[5:]
+prog, key, creato, cache, conf = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0), sys.argv[4], sys.argv[5]
+cartelle = sys.argv[6:]
 BUCO = 60
-RE = re.compile(rb'"timestamp":"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)')
+VER = 2                                     # formato della cache: se cambia, si riparte da zero
+RT = re.compile(rb'"timestamp":"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)')
 def sec(b):
     return int(datetime.datetime.strptime(b.decode(), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp())
-try: C = json.load(open(cache))
-except Exception: C = {}
+try: C = json.load(open(cache)); C = C if C.get("_ver") == VER else {"_ver": VER}
+except Exception: C = {"_ver": VER}
+try: PREZZI = json.load(open(conf)).get("additionalModelCostsCache") or {}     # dollari per milione di token
+except Exception: PREZZI = {}
+def prezzo(m):
+    if m in PREZZI: return PREZZI[m]
+    for k in sorted(PREZZI, key=len, reverse=True):
+        if m.startswith(k): return PREZZI[k]
+    return None
+def costo(m, u):
+    p = prezzo(m) or {}
+    cc = u.get("cache_creation") or {}
+    w1h = cc.get("ephemeral_1h_input_tokens") or 0
+    w5m = (u.get("cache_creation_input_tokens") or 0) - w1h
+    return ((u.get("input_tokens") or 0) * p.get("inputTokens", 0) + (u.get("output_tokens") or 0) * p.get("outputTokens", 0)
+            + w5m * p.get("promptCacheWriteTokens", 0) + w1h * p.get("promptCacheWrite1hTokens", 0)
+            + (u.get("cache_read_input_tokens") or 0) * p.get("promptCacheReadTokens", 0)) / 1e6
 def conto(f, da=0):
-    """secondi attivi del file; da>0 = solo da quell'ora in poi (niente cache)"""
-    st = os.stat(f)
-    c = C.get(f) if not da else None
-    if c and c["dim"] <= st.st_size and c["mt"] <= st.st_mtime:
-        pos, tot, ult = c["dim"], c["tot"], c["ult"]
-    else:
-        pos, tot, ult = 0, 0, 0
-    if pos < st.st_size:
+    """del file: secondi attivi, token (tutti e 4 i tipi), dollari; da>0 = solo da quell'ora in poi"""
+    st = os.stat(f); k = f + (f"@{da}" if da else "")
+    c = C.get(k)
+    nuovo = {"dim": 0, "tot": 0, "ult": 0, "tok": 0, "usd": 0.0, "id": ""}
+    if c and all(x in c for x in nuovo) and c["dim"] <= st.st_size and c["mt"] <= st.st_mtime: c = dict(c)
+    else: c = nuovo
+    if c["dim"] < st.st_size:
         with open(f, "rb") as h:
-            h.seek(pos); dati = h.read()
+            h.seek(c["dim"]); dati = h.read()
         fine = dati.rfind(b"\n") + 1           # solo righe complete
-        for m in RE.finditer(dati[:fine]):
+        for riga in dati[:fine].split(b"\n"):
+            m = RT.search(riga)
+            if not m: continue
             t = sec(m.group(1))
             if da and t < da: continue
-            if ult and 0 < t - ult <= BUCO: tot += t - ult
-            if t > ult: ult = t
-        pos += fine
-    if not da: C[f] = {"dim": pos, "mt": st.st_mtime, "tot": tot, "ult": ult}
-    return tot
-def cartella(k): return glob.glob(os.path.join(prog, k, "*.jsonl"))
+            if c["ult"] and 0 < t - c["ult"] <= BUCO: c["tot"] += t - c["ult"]
+            if t > c["ult"]: c["ult"] = t
+            if b'"usage"' in riga and b'"assistant"' in riga:
+                try: o = json.loads(riga)
+                except Exception: continue
+                msg = o.get("message") or {}; u = msg.get("usage") or {}
+                mid = msg.get("id") or o.get("requestId") or ""
+                if not u or mid == c["id"]: continue      # la stessa risposta e' scritta in piu' righe: si conta una volta
+                c["id"] = mid
+                c["tok"] += sum(u.get(x) or 0 for x in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+                c["usd"] += costo(msg.get("model") or "", u)
+        c["dim"] += fine
+    c["mt"] = st.st_mtime; C[k] = c
+    return c
+def file_di(k):  return glob.glob(os.path.join(prog, k, "*.jsonl"))
+def agenti_di(k): return glob.glob(os.path.join(prog, k, "*", "subagents", "*.jsonl"))
 chiave = lambda c: re.sub(r"[^A-Za-z0-9]", "-", c)
-lav = sum(conto(f) for f in cartella(key))
-tut = sum(conto(f) for k in sorted({chiave(c) for c in cartelle}) for f in cartella(k))
-ses = sum(conto(f, creato) for f in cartella(key) if os.stat(f).st_mtime >= creato) if creato else 0
+L = [conto(f) for f in file_di(key)]; A = [conto(f) for f in agenti_di(key)]
+lav = sum(x["tot"] for x in L); tok = sum(x["tok"] for x in L + A)
+usd = sum(x["usd"] for x in L + A); ag = sum(x["usd"] for x in A)
+tut = sum(conto(f)["tot"] for k in sorted({chiave(c) for c in cartelle}) for f in file_di(k))
+S = [conto(f, creato) for f in file_di(key) + agenti_di(key) if os.stat(f).st_mtime >= creato] if creato else []
+ses = sum(x["tot"] for x in S if True); sesusd = sum(x["usd"] for x in S)
 try:
     tmp = cache + ".nuovo"; json.dump(C, open(tmp, "w")); os.replace(tmp, cache)
 except Exception: pass
-print(ses, lav, tut)
+print(ses, lav, tut, tok, f"{usd:.2f}", f"{ag:.2f}", f"{sesusd:.2f}")
 PY
   )
-  # stessa forma della prima riga: voci separate da " · ", dal piccolo al grande
   [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero (senza le pause): sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut")"
 fi
-if [ "$TEMPI" = 1 ]; then      # seconda riga: tempi veri, poi (ultimo) l'interruttore dello stile, scritto per intero
-  o=$attivo
-  if [ "${2:-}" != senzafirma ]; then
-    lungo="✎ per la mod: iacopo off | on (ora $stile)"
-    if [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( ${#o} + ${#lungo} + 8 )) -gt "$larg" ]; then lungo="✎ iacopo off|on ($stile)"; fi
-    o+="${o:+ · }$lungo"
+soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotondati
+unisci(){ local o="" x; for x in "$@"; do [ -n "$x" ] && o+="${o:+ · }$x"; done; printf '%s' "$o"; }
+if [ "$TEMPI" = 1 ]; then      # terza riga: tempo vero, poi (ultimo) l'interruttore dello stile, per intero
+  if [ "${2:-}" != senzafirma ]; then p_stile="✎ per la mod: iacopo off | on (ora $stile)"; else p_stile="iacopostyle $stile"; fi
+  printf '%s ' "$(unisci "$attivo" "$p_stile")"; exit 0
+fi
+if [ "$CONTI" = 1 ]; then      # seconda riga: tempo aperta, sessioni, quanto costa (listino API), token, righe
+  na=$(tmux list-sessions 2>/dev/null | grep -c .)
+  ses_usd=${c_costo:-${e_ses:-}}                         # il costo della sessione lo da' Claude Code; se manca, il nostro conto
+  # il lavoro dalle conversazioni salvate (se Claude Code le ha compattate la storia vecchia puo' mancare):
+  # non scende mai sotto la sessione
+  [ -n "${e_lav:-}" ] && [ -n "$ses_usd" ] && e_lav=$(awk -v a="$e_lav" -v b="$ses_usd" 'BEGIN{printf "%.2f", (b>a)?b:a}')
+  p_soldi=""
+  if [ -n "${e_lav:-}" ]; then
+    p_soldi="💶 costo a listino: sessione $(soldi "$ses_usd") · questo lavoro ≈$(soldi "$e_lav")"
+    [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_soldi+=" (di cui agenti $(soldi "$e_ag"))"
   fi
-  printf '%s ' "$o"; exit 0
+  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok="🪙 token del lavoro $(nfmt "$t_lav")"
+  p_righe=""; [ -n "$c_righe" ] && p_righe="${c_righe/📝 /📝 righe in sessione }"
+  printf '%s ' "$(unisci "$tempo" "● $na aperte" "$p_soldi" "$p_tok" "$p_righe")"; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
@@ -151,7 +227,14 @@ riga(){   # riga <larga|stretta|minima> [senzafirma]
   #   macchina · modello · token · tempo · sessioni aperte · firma · interruttore dell'iacopostyle
   local o="" p m=$mac
   [ "$1" = minima ] && m=${mac%% *}                                 # minima: la macchina senza indirizzo
-  for p in "$avviso" "$m" "$modello" "$gettoni" "$tempo"; do [ -n "$p" ] && o+=" · $p"; done
+  local ctx=$contesto lim=$limiti
+  [ "$1" != larga ] && { ctx=${ctx/contesto /}; lim=${lim/abbonamento /}; }
+  if [ "$RIGA1" = 1 ]; then
+    for p in "$avviso" "$m" "$modello" "$contesto" "$limiti"; do [ -n "$p" ] && o+=" · $p"; done
+    [ "${2:-}" != senzafirma ] && o+=" · $FIRMA"
+    printf '%s' "${o# · }"; return
+  fi
+  for p in "$avviso" "$m" "$modello" "$ctx" "$lim" "$tempo"; do [ -n "$p" ] && o+=" · $p"; done
   if [ "$1" = larga ]; then o+=" · ● $na aperte"; else o+=" · ● $na"; fi
   if [ "$RIGA1" = 1 ]; then
     [ "${2:-}" != senzafirma ] && o+=" · $FIRMA"                    # l'interruttore dello stile sta nella seconda riga

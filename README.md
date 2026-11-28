@@ -248,36 +248,33 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è tutta su **una riga**, a sinistra accanto al nome della
-sessione (la imposta `lavori` stesso, e resta anche con la mod spenta):
+Nelle sessioni aperte con `lavori` la barra in basso ha **tre righe**, tutte scritte per intero (la imposta `lavori`
+stesso, e resta anche con la mod spenta):
 
 ```
-[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 🪙 367k · ⏱ 0h23m · ● 2 aperte · Iacopo, 6 novembre 2026
+[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 📦 contesto 461k/1.0M 46% · ⏳ abbonamento 5h 30% · 7gg 16% · Iacopo, 6 novembre 2026
+ ⏱ 0h08m · ● 1 aperte · 💶 costo a listino: sessione 59 $ · questo lavoro ≈59 $ · 🪙 token del lavoro 73.2M · 📝 righe in sessione +292/-24
+ ✍ lavoro vero (senza le pause): sessione 0h05m · questo lavoro 1h35m · tutti i lavori 102h · ✎ per la mod: iacopo off | on (ora on)
 ```
 
-- **la macchina**: nome host e indirizzo, per non sbagliare macchina quando ne hai più d'una aperta
-  (`LAVORI_MACCHINA="testo"` la cambia, `LAVORI_MACCHINA=""` la toglie);
-- ⏱ tempo della sessione · 🪙 token della conversazione corrente · 🧠 modello in uso · ● sessioni aperte;
-  il modello cambia subito quando usi `/model` (la barra si aggiorna ogni 2 secondi). Se il modello è un **Fable**,
-  di qualsiasi versione, la voce lampeggia: cambia colore ogni 2 secondi (un giro di sette colori di sfondo, con la scritta rossa; sul rosso e sull'arancione la scritta è bianca o nera), per ricordarti che costa. Se è un **Haiku**, il modello più piccolo, lampeggia in bianco e nero a inversione, per
-  ricordarti di non dargli cose difficili. I modelli che per te sono a
-  pagamento escono con 💰 invece di 🧠: scrivili uno per riga (basta un pezzo del nome, es. `fable-5-2`) in
-  `/etc/lavori/modelli-a-pagamento`;
-- il comando della mod con lo stato di adesso, e la firma.
+1. **Dove e con cosa**: la macchina (nome e indirizzo; `LAVORI_MACCHINA` la cambia o la toglie), il **modello** (cambia
+   subito col `/model`; un **Fable** lampeggia a colori col 💰, un **Haiku** in bianco e nero; i modelli che per te
+   sono a pagamento escono col 💰 se li scrivi, uno per riga, in `/etc/lavori/modelli-a-pagamento`), il **contesto**
+   attuale sul limite del modello (⚠ oltre l'80%: è il momento di `/compact`), i **limiti dell'abbonamento** (finestra
+   di 5 ore e settimana; ⚠ oltre l'80%), la firma.
+2. **Quanto costa**: ⏱ da quanto è aperta la sessione, ● sessioni aperte, 💶 **costo a listino API** della sessione e
+   del lavoro (anche con l'abbonamento dice quanto vale; a parte quello dei **sottoagenti**), 🪙 **token** del lavoro
+   (tutti e quattro i tipi: ingresso, uscita, cache scritta, cache letta), 📝 righe cambiate in questa sessione.
+3. **Tempo vero di lavoro**, calcolato dagli orari della conversazione (le pause di più di 1 minuto in cui nessuno
+   scrive non contano): questa sessione, questo lavoro, tutti i lavori; per ultimo l'interruttore dello stile.
 
-Sotto c'è una **seconda riga** con il **tempo vero di lavoro**, calcolato dagli orari della conversazione (i tuoi
-messaggi, le risposte e i passi di Claude): le pause di più di 1 minuto in cui nessuno scrive non contano.
+Da dove vengono i numeri: modello, contesto, limiti, costo e righe della sessione li passa Claude Code alla sua riga di
+stato (`~/.claude/avviso-tmux.sh` li salva in `/etc/lavori/claude/<sessione>.json`); i conti del lavoro si fanno dalle
+conversazioni salvate, coi prezzi che Claude Code tiene sulla macchina, con una cache (`attivo.cache`) che rilegge solo
+la parte nuova. Se Claude Code ha compattato una conversazione, la sua storia vecchia può mancare: per questo il costo
+del lavoro ha il ≈ e non scende mai sotto quello della sessione. Lo storico delle aperture resta in `lavori ore`.
 
-```
-✍ lavoro vero (senza le pause): sessione 0h05m · questo lavoro 1h18m · tutti i lavori 81h29m · ✎ per la mod: iacopo off | on (ora on)
-```
-
-Il ⏱ della prima riga invece è il tempo di apertura della sessione: riparte da zero a ogni sessione nuova e corre
-anche quando non fai niente. Lo storico delle aperture resta in `lavori ore`. I conti si tengono in una cache
-(`attivo.cache` nella cartella dei dati), così ogni 5 secondi si rilegge solo la parte nuova delle conversazioni.
-
-Se il terminale è stretto la riga si accorcia da sola (via «aperte» e «per la mod:»); la firma non si tocca. Quando
-il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida `plancia`),
+Quando il terminale è troppo piccolo per i pannelli (meno di 120 colonne, o meno di 26 righe con la guida `plancia`),
 davanti a tutto compare `⚠ metti a tutto schermo (ora 100x25)`; sparisce da solo quando lo allarghi.
 
 Per le sessioni tmux che **non** apri con `lavori` puoi avere la stessa riga aggiungendo al tuo `~/.tmux.conf`:
