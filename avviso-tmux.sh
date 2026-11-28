@@ -19,7 +19,8 @@ if [ -n "$TMUX" ]; then
         C="${LAVORI_DIR:-/etc/lavori}/claude"
         mkdir -p "$C" 2>/dev/null && printf '%s\n' "$DATI" > "$C/.$SESS.json.nuovo" 2>/dev/null && mv -f "$C/.$SESS.json.nuovo" "$C/$SESS.json" 2>/dev/null
     fi
-    [ "$1" = status ] && printf '\033[32m● tmux "%s": se cade la linea rilancia %s\033[0m\n' "$SESS" "$RIPARTI"
+    # dentro tmux la riga di stato non scrive niente: "se cade la linea rientri con lavori NOME" sta gia' nel pannello
+    # in basso (riga MACCHINA), e cosi' sotto il campo dove scrivi resta una riga sola, quella di Claude Code
     exit 0
 fi
 # fuori da tmux: il lavoro della cartella corrente (il piu' lungo che la contiene), se no l'elenco

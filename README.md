@@ -249,19 +249,19 @@ niente, stampa il testo.
 
 ### Barra di stato tmux
 Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe** su fondo blu notte: ogni riga ha
-un'etichetta colorata a sinistra, le parole in azzurro tenue e i valori in color crema. Ogni voce dice da sola cosa
-è, senza sigle (la imposta `lavori` stesso, e resta anche con la mod spenta):
+un'etichetta colorata a sinistra e ogni voce sta nella sua **striscia colorata**, diversa da quelle vicine, coi valori
+in color crema. Ogni voce dice da sola cosa è, senza sigle (la imposta `lavori` stesso, e resta anche con la mod spenta):
 
 ```
- MACCHINA    server mioserver 203.0.113.10 │ lavoro MioLavoro │ aperta da 19 min │ altre sessioni aperte: server │ Iacopo, 6 novembre 2026
+ MACCHINA    mioserver 203.0.113.10 │ se cade la linea: lavori MioLavoro │ aperta da 19 min │ altre aperte: server │ Iacopo, 6 novembre 2026
  MODELLO     stai usando  Opus 5.5  │ memoria della chat piena al 49% (494 mila token su 1 milione) · resta libero il 51%
  ABBONAMENTO 5 ore: usato 9%, resta 91%, si azzera alle 15:10 (tra 4 h 48 min) │ settimana: usato 17%, resta 83%, si azzera ven 04/12 alle 17:00
  COSTO       pagando a consumo: questa sessione 69 $ │ tutto il lavoro circa 69 $ │ token del lavoro 78,9 milioni │ righe: 292 aggiunte, 24 tolte
  TEMPO VERO  senza le pause: questa sessione 10 min · tutto il lavoro 1 h 40 min · tutti i lavori 102 h │ ✎ mod pannelli: accesa (iacopo on | off)
 ```
 
-- **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il lavoro, da quanto è aperta
-  la sessione, le **altre** sessioni aperte oltre a questa (in giallo, coi nomi; se non ce ne sono non compare niente), la firma.
+- **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade
+  la linea, da quanto è aperta la sessione, le **altre** sessioni aperte oltre a questa (in giallo, coi nomi; se non ce ne sono non compare niente), la firma.
 - **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** lampeggia a colori con scritto «costa caro»,
   un **Haiku** in bianco e nero) e quanto è piena la memoria della chat, cioè il contesto: all'80% compare
   `⚠ quasi piena: fai /compact`.
