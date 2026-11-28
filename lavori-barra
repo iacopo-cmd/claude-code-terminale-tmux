@@ -24,8 +24,9 @@ export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in carat
 #   --modello  MODELLO    modello · contesto · abbonamento
 #   --conti    COSTO      sessione · questo lavoro · agenti · token · righe
 #   --tempi    TEMPO      lavoro vero (sessione, lavoro, tutti) · per ultimo l'interruttore dello stile
-TEMPI=0; RIGA1=0; CONTI=0; MODELLO=0
-case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; --conti) CONTI=1; shift ;; --modello) MODELLO=1; shift ;; esac
+#   --limiti   ABBONAMENTO  quanto hai usato e quanto resta dei limiti (5 ore, settimana) e quando si azzerano
+TEMPI=0; RIGA1=0; CONTI=0; MODELLO=0; LIMITI=0
+case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; --conti) CONTI=1; shift ;; --modello) MODELLO=1; shift ;; --limiti) LIMITI=1; shift ;; esac
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
@@ -96,7 +97,7 @@ fi
 contesto=""; limiti=""; c_costo=""; c_righe=""
 CJ="${IDX%/*}/claude/$s.json"
 if [ -s "$CJ" ] && command -v python3 >/dev/null; then
-  IFS='|' read -r c_mod c_ctx c_max c_perc c_5h c_7g c_costo c_add c_tol < <(python3 -I - "$CJ" <<'PY' 2>/dev/null
+  IFS='|' read -r c_mod c_ctx c_max c_perc c_5h c_7g c_costo c_add c_tol c_5h_fine c_7g_fine < <(python3 -I - "$CJ" <<'PY' 2>/dev/null
 import sys, json
 d = json.load(open(sys.argv[1])); g = lambda *k: (lambda o: [o := (o or {}).get(x) for x in k][-1])(d)
 cu = g("context_window", "current_usage") or {}
@@ -104,7 +105,8 @@ ctx = sum(cu.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens"
 v = [g("model", "display_name") or "", ctx, g("context_window", "context_window_size") or 0,
      g("context_window", "used_percentage"), g("rate_limits", "five_hour", "used_percentage"),
      g("rate_limits", "seven_day", "used_percentage"), g("cost", "total_cost_usd"),
-     g("cost", "total_lines_added"), g("cost", "total_lines_removed")]
+     g("cost", "total_lines_added"), g("cost", "total_lines_removed"),
+     g("rate_limits", "five_hour", "resets_at"), g("rate_limits", "seven_day", "resets_at")]
 print("|".join("" if x is None else (f"{x:.2f}" if isinstance(x, float) else str(x)) for x in v))
 PY
   )
@@ -203,64 +205,91 @@ PY
   [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero (senza le pause): sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut")"
 fi
 soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotondati
-# --- il pannello: colori di tmux (#[...]), non occupano posto. Fondo scuro (lo mette "lavori"), etichetta colorata,
-#     parole di contorno in grigio, valori in bianco grassetto, separatore sottile.
-# Colori (28/11, il grigio e bianco affaticava): fondo blu notte, parole in azzurro tenue, valori in crema caldo
+# --- il pannello: colori di tmux (#[...]), non occupano posto. Fondo blu notte (lo mette "lavori"), etichetta
+#     colorata, parole in azzurro tenue, valori in crema grassetto, separatore sottile.
+#     REGOLA (Iacopo, 28/11): ogni voce deve dire DA SOLA cosa e': niente sigle, niente numeri senza dire se e'
+#     usato o rimasto, le durate scritte "13 min" / "1 h 38 min".
 G='#[fg=colour110,nobold]'; V='#[fg=colour229,bold]'; Z='#[default]'; SEP=" #[fg=colour61,nobold]│$Z "
-etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-9s#[default] ' "$1" "$2"; }        # etichetta <colore> <nome>
-voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola grigia> <valore bianco>
+etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-11s#[default] ' "$1" "$2"; }      # etichetta <colore> <nome>
+voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola> <valore>
 perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
         printf '#[fg=%s,bold]%s%%%s' "$c" "$1" "$Z"; }
 fila(){ local o="" x; for x in "$@"; do [ -n "$x" ] && o+="${o:+$SEP}$x"; done; printf '%s' "$o"; }
+chiaro(){ local d=${1:-0}; [ "$d" -lt 0 ] && d=0                                     # durata in chiaro
+  if   [ "$d" -ge 360000 ]; then printf '%d h' $((d/3600))
+  elif [ "$d" -ge 3600 ];   then printf '%d h %d min' $((d/3600)) $(((d%3600)/60))
+  else printf '%d min' $((d/60)); fi; }
+milioni(){ local n=${1:-0}                                                           # numero di token in chiaro
+  if [ "$n" -ge 1000000 ] && [ "$n" -lt 1100000 ]; then printf '1 milione'
+  elif [ "$n" -ge 1000000 ]; then printf '%d,%d milioni' $((n/1000000)) $(((n%1000000)/100000))
+  elif [ "$n" -ge 1000 ]; then printf '%d mila' $((n/1000)); else printf '%d' "$n"; fi; }
+adesso=$(date +%s)
 na=$(tmux list-sessions 2>/dev/null | grep -c .)
 if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
   p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour221,bold] $avviso $Z"
-  p_mac=""; [ -n "$mac" ] && p_mac="$V${mac%% *}$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac="$V$mac$Z"
-  if [ "$na" = 1 ]; then p_na="$V● 1$Z ${G}sessione aperta$Z"; else p_na="$V● $na$Z ${G}sessioni aperte$Z"; fi
+  p_mac=""; [ -n "$mac" ] && p_mac="${G}server$Z $V${mac%% *}$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac=$(voce server "$mac")
+  p_ap=""; [ -n "$creato" ] && p_ap=$(voce "aperta da" "$(chiaro $((adesso-creato)))")
+  p_na=$(voce "sessioni aperte:" "$na")
   p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
-  p_ap=""; [ -n "$tempo" ] && p_ap=$(voce "aperta da" "${tempo#⏱ }")
   printf '%s%s ' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$(voce lavoro "$s")" "$p_ap" "$p_na" "$p_firma")"; exit 0
 fi
-if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanto ne resta
+if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della chat e' piena
   p_mod=""
   if [ -n "$modello" ]; then
-    col="fg=colour229,bold"
+    col="fg=colour229,bold"; nota=""
     if [ "$lampo" = 1 ]; then    # Fable: giro di colori ogni 2 secondi (scritta rossa, tranne su rosso e arancione)
       giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
-      col="${giro[$(( $(date +%s) / 2 % ${#giro[@]} ))]},bold"
+      col="${giro[$(( adesso / 2 % ${#giro[@]} ))]},bold"; nota=" #[fg=colour203,bold]costa caro$Z"
     elif [ "$lampo" = 2 ]; then  # Haiku: bianco e nero a inversione
-      if [ $(( $(date +%s) / 2 % 2 )) -eq 0 ]; then col="fg=black,bg=white,bold"; else col="fg=white,bg=black,bold"; fi
+      if [ $(( adesso / 2 % 2 )) -eq 0 ]; then col="fg=black,bg=white,bold"; else col="fg=white,bg=black,bold"; fi
+      nota=" ${G}modello piccolo: niente cose difficili$Z"
     fi
-    p_mod="#[$col] $modello $Z"
+    p_mod="${G}stai usando$Z #[$col] ${modello#* } $Z$nota"
   fi
   p_ctx=""
   if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
-    p_ctx="$(voce contesto "$(nfmt "$c_ctx")") ${G}di $(nfmt "$c_max")$Z $(perc "$c_perc")"
-    [ "$c_perc" -ge 80 ] && p_ctx+=" #[fg=colour203,bold]⚠ fai /compact$Z"
+    p_ctx="${G}memoria della chat piena al$Z $(perc "$c_perc") $G($(milioni "$c_ctx") token su $(milioni "$c_max"))$Z"
+    if [ "$c_perc" -ge 80 ]; then p_ctx+=" #[fg=colour203,bold]⚠ quasi piena: fai /compact$Z"
+    else p_ctx+=" $G· resta libero il$Z $V$((100-c_perc))%$Z"; fi
   fi
-  p_lim=""
-  [[ "${c_5h:-}" =~ ^[0-9]+$ ]] && p_lim="${G}5 ore$Z $(perc "$c_5h")"
-  [[ "${c_7g:-}" =~ ^[0-9]+$ ]] && p_lim+="${p_lim:+ $G·$Z }${G}settimana$Z $(perc "$c_7g")"
-  [ -n "$p_lim" ] && p_lim="${G}abbonamento usato:$Z $p_lim"
-  printf '%s%s ' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "$p_lim")"; exit 0
+  printf '%s%s ' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx")"; exit 0
 fi
-if [ "$CONTI" = 1 ]; then      # COSTO: quanto vale il lavoro, a listino API
+if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, quanto resta, quando si azzera
+  GG=(dom lun mar mer gio ven sab)
+  limite(){   # limite <nome> <percentuale usata> <ora di azzeramento> <corto|lungo>
+    local nome=$1 u=$2 fine=$3 o
+    if ! [[ "$u" =~ ^[0-9]+$ ]]; then printf '%s%s: dato non disponibile adesso%s' "$G" "$nome" "$Z"; return; fi
+    o="$G$nome: usato$Z $(perc "$u")$G, resta$Z $V$((100-u))%$Z"
+    if [[ "$fine" =~ ^[0-9]+$ ]] && [ "$fine" -gt "$adesso" ]; then
+      if [ "$4" = corto ]; then o+="$G, si azzera alle$Z $V$(date -d "@$fine" +%H:%M)$Z $G(tra $(chiaro $((fine-adesso))))$Z"
+      else o+="$G, si azzera$Z $V${GG[$(date -d "@$fine" +%w)]} $(date -d "@$fine" +%d/%m)$Z ${G}alle$Z $V$(date -d "@$fine" +%H:%M)$Z"; fi
+    fi
+    printf '%s' "$o"; }
+  if [ -s "$CJ" ]; then
+    printf '%s%s ' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")"
+  else
+    printf '%s%s ' "$(etichetta colour80 ABBONAMENTO)" "${G}i limiti compaiono dopo la prima risposta di Claude$Z"
+  fi
+  exit 0
+fi
+if [ "$CONTI" = 1 ]; then      # COSTO: quanto varrebbe il lavoro pagando a consumo (listino API)
   ses_usd=${c_costo:-${e_ses:-}}                         # il costo della sessione lo da' Claude Code; se manca, il nostro conto
   # il lavoro dalle conversazioni salvate (se Claude Code le ha compattate la storia vecchia puo' mancare):
   # non scende mai sotto la sessione
   [ -n "${e_lav:-}" ] && [ -n "$ses_usd" ] && e_lav=$(awk -v a="$e_lav" -v b="$ses_usd" 'BEGIN{printf "%.2f", (b>a)?b:a}')
-  p_ses=""; [ -n "$ses_usd" ] && p_ses=$(voce sessione "$(soldi "$ses_usd")")
-  p_lav=""; [ -n "${e_lav:-}" ] && p_lav=$(voce "questo lavoro" "≈$(soldi "$e_lav")")
-  p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "di cui agenti" "$(soldi "$e_ag")")
-  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "token del lavoro" "$(nfmt "$t_lav")")
-  p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}righe in sessione$Z #[fg=colour114,bold]+$c_add$Z #[fg=colour203,bold]−${c_tol:-0}$Z"
-  printf '%s%s ' "$(etichetta colour215 COSTO)" "$(fila "$p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe" "${G}prezzi di listino API$Z")"; exit 0
+  p_ses=""; [ -n "$ses_usd" ] && p_ses=$(voce "questa sessione" "$(soldi "$ses_usd")")
+  p_lav=""; [ -n "${e_lav:-}" ] && p_lav=$(voce "tutto il lavoro circa" "$(soldi "$e_lav")")
+  p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "di cui sottoagenti" "$(soldi "$e_ag")")
+  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "token del lavoro" "$(milioni "$t_lav")")
+  p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}righe:$Z #[fg=colour114,bold]$c_add aggiunte$Z$G,$Z #[fg=colour203,bold]${c_tol:-0} tolte$Z"
+  printf '%s%s ' "$(etichetta colour215 COSTO)" "$(fila "${G}pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")"; exit 0
 fi
-if [ "$TEMPI" = 1 ]; then      # TEMPO: da quanto e' aperta, quanto lavoro vero; per ultimo l'interruttore dello stile
+if [ "$TEMPI" = 1 ]; then      # TEMPO: il lavoro vero; per ultimo l'interruttore dello stile
   p_vero=""
-  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && p_vero="${G}lavoro vero, senza le pause:$Z $(voce sessione "$(dur "$a_sess")") $G·$Z $(voce "questo lavoro" "$(dur "$a_lav")") $G·$Z $(voce "tutti i lavori" "$(dur "$a_tut")")"
-  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ per la mod:$Z ${V}iacopo off | on$Z ${G}(ora $stile)$Z"; else p_stile="${G}iacopostyle $stile$Z"; fi
-  printf '%s%s ' "$(etichetta colour114 TEMPO)" "$(fila "$p_vero" "$p_stile")"; exit 0
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && p_vero="${G}senza le pause:$Z $(voce "questa sessione" "$(chiaro "$a_sess")") $G·$Z $(voce "tutto il lavoro" "$(chiaro "$a_lav")") $G·$Z $(voce "tutti i lavori" "$(chiaro "$a_tut")")"
+  acc=spenta; [ "$stile" = on ] && acc=accesa
+  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ mod pannelli:$Z $V$acc$Z $G(${Z}${V}iacopo on | off$Z$G)$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
+  printf '%s%s ' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "$p_stile")"; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)

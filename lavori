@@ -292,15 +292,15 @@ guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pan
 stile_stato() { [ "$(head -1 "$DIR/stile" 2>/dev/null)" = off ] && echo off || echo on; }
 _pannelli_scambi() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '/lavori-risposte/{print $1}'; }
 _pannello_claude() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '!/lavori-risposte/{print $1; exit}'; }
-barra() {   # barra <sessione>: il pannello in basso, quattro righe. C'e' sempre, anche con la mod spenta
+barra() {   # barra <sessione>: il pannello in basso, cinque righe. C'e' sempre, anche con la mod spenta
     local sess=$1 n=0 riga
     # 28/11: pannello su fondo scuro, una riga per argomento con l'etichetta colorata a sinistra (le scrive
-    # lavori-barra): MACCHINA, MODELLO, COSTO, TEMPO. L'elenco delle finestre di tmux non si mostra.
+    # lavori-barra): MACCHINA, MODELLO, ABBONAMENTO, COSTO, TEMPO. L'elenco delle finestre di tmux non si mostra.
     local firma=""; [ -n "$FIRMA" ] || firma=" senzafirma"
     local cmd=/usr/local/bin/lavori-barra
-    tmux set-option -t "=$sess:" status 4 2>/dev/null || true
+    tmux set-option -t "=$sess:" status 5 2>/dev/null || true
     tmux set-option -t "=$sess:" status-style "bg=colour17,fg=colour110" 2>/dev/null || true
-    for riga in --riga1 --modello --conti --tempi; do
+    for riga in --riga1 --modello --limiti --conti --tempi; do
         tmux set-option -t "=$sess:" "status-format[$n]" "#[align=left]#($cmd $riga #{session_name}$firma)" 2>/dev/null || true
         n=$((n+1))
     done

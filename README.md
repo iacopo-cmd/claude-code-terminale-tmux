@@ -248,28 +248,30 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di quattro righe** su fondo blu notte: ogni riga ha
-un'etichetta colorata a sinistra, le parole di contorno in azzurro tenue e i valori in color crema (la imposta `lavori` stesso,
-e resta anche con la mod spenta):
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe** su fondo blu notte: ogni riga ha
+un'etichetta colorata a sinistra, le parole in azzurro tenue e i valori in color crema. Ogni voce dice da sola cosa
+è, senza sigle (la imposta `lavori` stesso, e resta anche con la mod spenta):
 
 ```
- MACCHINA  mioserver 203.0.113.10 │ lavoro MioLavoro │ aperta da 0h13m │ ● 1 sessione aperta │ Iacopo, 6 novembre 2026
- MODELLO   🧠 Opus 5.5 │ contesto 479k di 1.0M 48% │ abbonamento usato: 5 ore 7% · settimana 17%
- COSTO     sessione 67 $ │ questo lavoro ≈67 $ │ token del lavoro 76.0M │ righe in sessione +292 −24 │ prezzi di listino API
- TEMPO     lavoro vero, senza le pause: sessione 0h08m · questo lavoro 1h38m · tutti i lavori 102h │ ✎ per la mod: iacopo off | on (ora on)
+ MACCHINA    server mioserver 203.0.113.10 │ lavoro MioLavoro │ aperta da 19 min │ sessioni aperte: 1 │ Iacopo, 6 novembre 2026
+ MODELLO     stai usando  Opus 5.5  │ memoria della chat piena al 49% (494 mila token su 1 milione) · resta libero il 51%
+ ABBONAMENTO 5 ore: usato 9%, resta 91%, si azzera alle 15:10 (tra 4 h 48 min) │ settimana: usato 17%, resta 83%, si azzera ven 04/12 alle 17:00
+ COSTO       pagando a consumo: questa sessione 69 $ │ tutto il lavoro circa 69 $ │ token del lavoro 78,9 milioni │ righe: 292 aggiunte, 24 tolte
+ TEMPO VERO  senza le pause: questa sessione 10 min · tutto il lavoro 1 h 40 min · tutti i lavori 102 h │ ✎ mod pannelli: accesa (iacopo on | off)
 ```
 
-- **MACCHINA**: nome e indirizzo (`LAVORI_MACCHINA` li cambia o li toglie), il lavoro, da quanto è aperta la sessione,
-  quante sessioni sono aperte, la firma.
-- **MODELLO**: il modello (cambia subito col `/model`; un **Fable** lampeggia a colori col 💰, un **Haiku** in bianco e
-  nero; col 💰 anche i modelli che scrivi, uno per riga, in `/etc/lavori/modelli-a-pagamento`), il **contesto** attuale
-  sul limite del modello e i **limiti dell'abbonamento** (5 ore e settimana). Le percentuali sono verdi, gialle dal
-  60% e rosse dall'80%; col contesto all'80% compare `⚠ fai /compact`.
-- **COSTO**: a prezzi di listino API (anche con l'abbonamento dice quanto vale): la sessione, il lavoro, a parte i
-  **sottoagenti** quando ci sono; i **token** del lavoro (ingresso, uscita, cache scritta, cache letta); le righe
-  aggiunte e tolte in questa sessione.
-- **TEMPO**: il lavoro vero, dagli orari della conversazione (le pause di più di 1 minuto in cui nessuno scrive non
-  contano): questa sessione, questo lavoro, tutti i lavori; per ultimo l'interruttore dello stile.
+- **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il lavoro, da quanto è aperta
+  la sessione, quante sessioni tmux sono aperte, la firma.
+- **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** lampeggia a colori con scritto «costa caro»,
+  un **Haiku** in bianco e nero) e quanto è piena la memoria della chat, cioè il contesto: all'80% compare
+  `⚠ quasi piena: fai /compact`.
+- **ABBONAMENTO**: i due limiti, quello delle 5 ore e quello della settimana: quanto hai usato, quanto resta e quando
+  si azzerano. Le percentuali usate sono verdi, gialle dal 60% e rosse dall'80%.
+- **COSTO**: quanto costerebbe pagando a consumo, a prezzi di listino API (anche con l'abbonamento dice quanto vale il
+  lavoro): questa sessione, tutto il lavoro, a parte i **sottoagenti** quando ci sono; i token del lavoro (ingresso,
+  uscita, cache scritta e letta); le righe aggiunte e tolte in questa sessione.
+- **TEMPO VERO**: il tempo di lavoro senza le pause, dagli orari della conversazione (più di 1 minuto senza che
+  nessuno scriva non conta): questa sessione, tutto il lavoro, tutti i lavori; per ultimo la mod dei pannelli.
 
 Da dove vengono i numeri: modello, contesto, limiti, costo e righe della sessione li passa Claude Code alla sua riga di
 stato (`~/.claude/avviso-tmux.sh` li salva in `/etc/lavori/claude/<sessione>.json`); i conti del lavoro si fanno dalle
