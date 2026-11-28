@@ -209,25 +209,25 @@ soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotonda
 #     colorata, parole in azzurro tenue, valori in crema grassetto, separatore sottile.
 #     REGOLA (Iacopo, 28/11): ogni voce deve dire DA SOLA cosa e': niente sigle, niente numeri senza dire se e'
 #     usato o rimasto, le durate scritte "13 min" / "1 h 38 min".
-# Ogni voce sta nella SUA striscia colorata, diversa da quelle vicine (28/11, come gia' il Fable): cosi' si vede
-# dove finisce una e comincia l'altra. Dentro la striscia: parole in sabbia chiaro, valori in crema grassetto.
+# Ogni RIGA ha il suo colore di fondo, intero da sinistra a destra, diverso dalle altre (28/11: le strisce per voce
+# facevano confusione). Dentro la riga le voci sono separate da una barretta; parole in sabbia, valori in crema.
 G='#[fg=colour187,nobold]'; V='#[fg=colour229,bold]'; Z='#[fg=colour187,nobold]'
-STRISCE=(colour24 colour53 colour23 colour58 colour60)      # blu, viola scuro, verde petrolio, oliva, grigio-viola
-RIGA_N=0                                                    # ogni riga parte da un colore diverso
-etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-11s#[default] ' "$1" "$2"; }      # etichetta <colore> <nome>
+FONDO=colour17                                              # lo imposta ogni riga prima di scrivere
+etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-11s#[bg=%s] ' "$1" "$2" "$FONDO"; }   # etichetta <colore> <nome>
 voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola> <valore>
 perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
         printf '#[fg=%s,bold]%s%%%s' "$c" "$1" "$Z"; }
-fila(){ local o="" x i=$RIGA_N b     # ogni voce nella sua striscia; @B@ dentro una voce = "torna al colore della striscia"
+fila(){ local o="" x     # le voci della riga, separate da una barretta; @B@ dentro una voce = "torna al fondo della riga"
   for x in "$@"; do
     [ -n "$x" ] || continue
-    b="#[bg=${STRISCE[$(( i % ${#STRISCE[@]} ))]}]"; i=$((i+1))
-    o+="${o:+ }$b$G ${x//@B@/$b} #[default]"
+    o+="${o:+ #[fg=colour223,nobold]│ }$G${x//@B@/#[bg=$FONDO]}"
   done; printf '%s' "$o"; }
-chiaro(){ local d=${1:-0}; [ "$d" -lt 0 ] && d=0                                     # durata in chiaro
-  if   [ "$d" -ge 360000 ]; then printf '%d h' $((d/3600))
-  elif [ "$d" -ge 3600 ];   then printf '%d h %d min' $((d/3600)) $(((d%3600)/60))
-  else printf '%d min' $((d/60)); fi; }
+chiaro(){ local d=${1:-0} h m; [ "$d" -lt 0 ] && d=0; h=$((d/3600)); m=$(((d%3600)/60))   # durata in parole
+  local ore=ore; [ "$h" = 1 ] && ore=ora
+  if   [ "$h" -ge 100 ]; then printf '%d ore' "$h"
+  elif [ "$h" -ge 1 ] && [ "$m" -gt 0 ]; then printf '%d %s e %d min' "$h" "$ore" "$m"
+  elif [ "$h" -ge 1 ]; then printf '%d %s' "$h" "$ore"
+  else printf '%d min' "$m"; fi; }
 milioni(){ local n=${1:-0}                                                           # numero di token in chiaro
   if [ "$n" -ge 1000000 ] && [ "$n" -lt 1100000 ]; then printf '1 milione'
   elif [ "$n" -ge 1000000 ]; then printf '%d,%d milioni' $((n/1000000)) $(((n%1000000)/100000))
@@ -248,7 +248,7 @@ if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
   fi
   p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
   p_lav=$(voce "se cade la linea:" "lavori $s")
-  RIGA_N=0; printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")"; exit 0
+  FONDO=colour24; printf '%s%s' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$p_lav" "$p_ap" "$p_na" "$p_firma")"; exit 0
 fi
 if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della chat e' piena
   p_mod=""
@@ -267,9 +267,9 @@ if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della
   if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
     p_ctx="${G}memoria della chat piena al$Z $(perc "$c_perc") $G($(milioni "$c_ctx") token su $(milioni "$c_max"))$Z"
     if [ "$c_perc" -ge 80 ]; then p_ctx+=" #[fg=colour203,bold]⚠ quasi piena: fai /compact$Z"
-    else p_ctx+=" $G· resta libero il$Z $V$((100-c_perc))%$Z"; fi
+    else p_lib=$(voce "resta libero il" "$((100-c_perc))%"); fi
   fi
-  RIGA_N=1; printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx")"; exit 0
+  FONDO=colour53; printf '%s%s' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "${p_lib:-}")"; exit 0
 fi
 if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, quanto resta, quando si azzera
   GG=(dom lun mar mer gio ven sab)
@@ -278,14 +278,16 @@ if [ "$LIMITI" = 1 ]; then     # ABBONAMENTO: i due limiti, quanto e' usato, qua
     if ! [[ "$u" =~ ^[0-9]+$ ]]; then printf '%s%s: dato non disponibile adesso%s' "$G" "$nome" "$Z"; return; fi
     o="$G$nome: usato$Z $(perc "$u")$G, resta$Z $V$((100-u))%$Z"
     if [[ "$fine" =~ ^[0-9]+$ ]] && [ "$fine" -gt "$adesso" ]; then
-      if [ "$4" = corto ]; then o+="$G, si azzera alle$Z $V$(date -d "@$fine" +%H:%M)$Z $G(tra $(chiaro $((fine-adesso))))$Z"
+      if [ "$4" = corto ]; then
+        o+="$G, si azzera alle$Z $V$(date -d "@$fine" +%H:%M)$Z"
+        [ $((fine-adesso)) -lt 3600 ] && o+=" $G(tra $(chiaro $((fine-adesso))))$Z"       # il "tra quanto" solo sotto l'ora
       else o+="$G, si azzera$Z $V${GG[$(date -d "@$fine" +%w)]} $(date -d "@$fine" +%d/%m)$Z ${G}alle$Z $V$(date -d "@$fine" +%H:%M)$Z"; fi
     fi
     printf '%s' "$o"; }
   if [ -s "$CJ" ]; then
-    RIGA_N=2; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")"
+    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "$(limite "5 ore" "${c_5h:-}" "${c_5h_fine:-}" corto)" "$(limite "settimana" "${c_7g:-}" "${c_7g_fine:-}" lungo)")"
   else
-    printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(RIGA_N=2; fila "i limiti compaiono dopo la prima risposta di Claude")"
+    FONDO=colour23; printf '%s%s' "$(etichetta colour80 ABBONAMENTO)" "$(fila "i limiti compaiono dopo la prima risposta di Claude")"
   fi
   exit 0
 fi
@@ -299,14 +301,14 @@ if [ "$CONTI" = 1 ]; then      # COSTO: quanto varrebbe il lavoro pagando a cons
   p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "di cui sottoagenti" "$(soldi "$e_ag")")
   p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "token del lavoro" "$(milioni "$t_lav")")
   p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}righe:$Z #[fg=colour114,bold]$c_add aggiunte$Z$G,$Z #[fg=colour203,bold]${c_tol:-0} tolte$Z"
-  RIGA_N=3; printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "${G}pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")"; exit 0
+  FONDO=colour94; printf '%s%s' "$(etichetta colour215 COSTO)" "$(fila "${G}pagando a consumo:$Z $p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe")"; exit 0
 fi
 if [ "$TEMPI" = 1 ]; then      # TEMPO: il lavoro vero; per ultimo l'interruttore dello stile
   p_vero=""
-  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && p_vero="${G}senza le pause:$Z $(voce "questa sessione" "$(chiaro "$a_sess")") $G·$Z $(voce "tutto il lavoro" "$(chiaro "$a_lav")") $G·$Z $(voce "tutti i lavori" "$(chiaro "$a_tut")")"
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && { p_vero=$(voce "senza pause: questa sessione" "$(chiaro "$a_sess")"); p_v2=$(voce "tutto il lavoro" "$(chiaro "$a_lav")"); p_v3=$(voce "tutti i lavori" "$(chiaro "$a_tut")"); }
   acc=spenta; [ "$stile" = on ] && acc=accesa
-  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ mod pannelli:$Z $V$acc$Z $G(${Z}${V}iacopo on | off$Z$G)$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
-  RIGA_N=4; printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "$p_stile")"; exit 0
+  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ mod$Z $V$acc$Z $G(${Z}${V}iacopo on | off$Z$G)$Z"; else p_stile="${G}mod dei pannelli $acc$Z"; fi
+  FONDO=colour22; printf '%s%s' "$(etichetta colour114 "TEMPO VERO")" "$(fila "$p_vero" "${p_v2:-}" "${p_v3:-}" "$p_stile")"; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)

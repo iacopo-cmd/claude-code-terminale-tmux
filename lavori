@@ -300,8 +300,9 @@ barra() {   # barra <sessione>: il pannello in basso, cinque righe. C'e' sempre,
     local cmd=/usr/local/bin/lavori-barra
     tmux set-option -t "=$sess:" status 5 2>/dev/null || true
     tmux set-option -t "=$sess:" status-style "bg=colour17,fg=colour110" 2>/dev/null || true
-    for riga in --riga1 --modello --limiti --conti --tempi; do
-        tmux set-option -t "=$sess:" "status-format[$n]" "#[align=left]#($cmd $riga #{session_name}$firma)" 2>/dev/null || true
+    # ogni riga col suo colore di fondo, intero (fill): blu, viola, petrolio, marrone, verde
+    for riga in --riga1:colour24 --modello:colour53 --limiti:colour23 --conti:colour94 --tempi:colour22; do
+        tmux set-option -t "=$sess:" "status-format[$n]" "#[align=left,bg=${riga#*:},fill=${riga#*:}]#($cmd ${riga%%:*} #{session_name}$firma)" 2>/dev/null || true
         n=$((n+1))
     done
     tmux set-option -t "=$sess:" status-interval 2 2>/dev/null || true   # ogni 2 s: modello dal vivo e lampeggio se e' Fable

@@ -248,16 +248,17 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe** su fondo blu notte: ogni riga ha
-un'etichetta colorata a sinistra e ogni voce sta nella sua **striscia colorata**, diversa da quelle vicine, coi valori
-in color crema. Ogni voce dice da sola cosa è, senza sigle (la imposta `lavori` stesso, e resta anche con la mod spenta):
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di cinque righe**: ogni riga ha il suo colore di
+fondo, intero da sinistra a destra (blu, viola, petrolio, marrone, verde), un'etichetta a sinistra e le voci separate
+da una barretta, coi valori in color crema. Ogni voce dice da sola cosa è, senza sigle (lo imposta `lavori` stesso,
+e resta anche con la mod spenta):
 
 ```
- MACCHINA    mioserver 203.0.113.10 │ se cade la linea: lavori MioLavoro │ aperta da 19 min │ altre aperte: server │ Iacopo, 6 novembre 2026
- MODELLO     stai usando  Opus 5.5  │ memoria della chat piena al 49% (494 mila token su 1 milione) · resta libero il 51%
- ABBONAMENTO 5 ore: usato 9%, resta 91%, si azzera alle 15:10 (tra 4 h 48 min) │ settimana: usato 17%, resta 83%, si azzera ven 04/12 alle 17:00
- COSTO       pagando a consumo: questa sessione 69 $ │ tutto il lavoro circa 69 $ │ token del lavoro 78,9 milioni │ righe: 292 aggiunte, 24 tolte
- TEMPO VERO  senza le pause: questa sessione 10 min · tutto il lavoro 1 h 40 min · tutti i lavori 102 h │ ✎ mod pannelli: accesa (iacopo on | off)
+ MACCHINA    mioserver 203.0.113.10 │ se cade la linea: lavori MioLavoro │ aperta da 29 min │ altre aperte: server │ Iacopo, 6 novembre 2026
+ MODELLO     stai usando  Opus 5.5  │ memoria della chat piena al 52% (521 mila token su 1 milione) │ resta libero il 48%
+ ABBONAMENTO 5 ore: usato 12%, resta 88%, si azzera alle 15:10 │ settimana: usato 17%, resta 83%, si azzera ven 04/12 alle 17:00
+ COSTO       pagando a consumo: questa sessione 71 $ │ tutto il lavoro circa 71 $ │ token del lavoro 85,0 milioni │ righe: 292 aggiunte, 24 tolte
+ TEMPO VERO  senza pause: questa sessione 14 min │ tutto il lavoro 1 ora e 44 min │ tutti i lavori 102 ore │ ✎ mod accesa (iacopo on | off)
 ```
 
 - **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade
