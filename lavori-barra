@@ -20,7 +20,7 @@ export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in carat
 #   --conti  quanto costa:     tempo aperta · sessioni aperte · 💶 costo · 🪙 token · 📝 righe
 #   --tempi  tempo vero:       ✍ sessione · questo lavoro · tutti i lavori · per ultimo l'interruttore dello stile
 # Dal 28/11 le righe sono QUATTRO, a pannello: un'etichetta colorata a sinistra e le voci in colonna, su fondo scuro
-#   --riga1    MACCHINA   macchina · lavoro · aperta da · sessioni aperte · firma
+#   --riga1    MACCHINA   macchina · lavoro · aperta da · le ALTRE sessioni aperte (se ci sono) · firma
 #   --modello  MODELLO    modello · contesto · abbonamento
 #   --conti    COSTO      sessione · questo lavoro · agenti · token · righe
 #   --tempi    TEMPO      lavoro vero (sessione, lavoro, tutti) · per ultimo l'interruttore dello stile
@@ -229,7 +229,12 @@ if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
   p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour221,bold] $avviso $Z"
   p_mac=""; [ -n "$mac" ] && p_mac="${G}server$Z $V${mac%% *}$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac=$(voce server "$mac")
   p_ap=""; [ -n "$creato" ] && p_ap=$(voce "aperta da" "$(chiaro $((adesso-creato)))")
-  p_na=$(voce "sessioni aperte:" "$na")
+  # le ALTRE sessioni aperte oltre a questa (questa non si segna: lo sai gia'); se non ce ne sono, niente
+  p_na=""; altre=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -vxF "$s" | paste -sd, | sed 's/,/, /g')
+  if [ -n "$altre" ]; then
+    [ "${#altre}" -gt 40 ] && altre="$(( na - 1 ))"
+    p_na="#[fg=colour221,nobold]altre sessioni aperte:$Z #[fg=colour221,bold]$altre$Z"
+  fi
   p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
   printf '%s%s ' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$(voce lavoro "$s")" "$p_ap" "$p_na" "$p_firma")"; exit 0
 fi
