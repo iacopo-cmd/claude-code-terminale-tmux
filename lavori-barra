@@ -232,7 +232,9 @@ if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
   # le ALTRE sessioni aperte oltre a questa (questa non si segna: lo sai gia'); se non ce ne sono, niente
   p_na=""; altre=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -vxF "$s" | paste -sd, | sed 's/,/, /g')
   if [ -n "$altre" ]; then
-    [ "${#altre}" -gt 40 ] && altre="$(( na - 1 ))"
+    # coi nomi se la riga ci sta nel terminale, senno' solo quante sono
+    fisso=$(( 13 + ${#mac} + ${#s} + 60 )); [ "${2:-}" != senzafirma ] && fisso=$(( fisso + ${#FIRMA} + 3 ))
+    [[ "${larg:-}" =~ ^[0-9]+$ ]] && [ $(( fisso + ${#altre} )) -gt "$larg" ] && altre="$(( na - 1 ))"
     p_na="#[fg=colour221,nobold]altre sessioni aperte:$Z #[fg=colour221,bold]$altre$Z"
   fi
   p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
