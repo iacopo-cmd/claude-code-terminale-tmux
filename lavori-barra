@@ -264,9 +264,8 @@ if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanta memoria della
   p_mod=""
   if [ -n "$modello" ]; then
     col="fg=colour230,bold"; nota=""
-    if [ "$lampo" = 1 ]; then    # Fable: giro di colori ogni 2 secondi (scritta rossa, tranne su rosso e arancione)
-      giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
-      col="${giro[$(( adesso / 2 % ${#giro[@]} ))]},bold"; nota=" $(allarme "costa caro")"
+    if [ "$lampo" = 1 ]; then    # Fable: riquadro FERMO, bianco su rosso (rosso = allarme: costa caro). Niente giro di colori
+      col="fg=colour231,bg=colour160,bold"; nota=" $(allarme "costa caro")"
     elif [ "$lampo" = 2 ]; then  # Haiku: bianco e nero a inversione
       if [ $(( adesso / 2 % 2 )) -eq 0 ]; then col="fg=black,bg=white,bold"; else col="fg=white,bg=black,bold"; fi
       nota=" modello piccolo, niente cose difficili"

@@ -273,7 +273,7 @@ spenta):
 
 - **MACCHINA**: nome e indirizzo del server (`LAVORI_MACCHINA` li cambia o li toglie), il comando per rientrare nel lavoro se cade
   la linea, da quanto è aperta la sessione, le **altre** sessioni aperte oltre a questa (in giallo, coi nomi; se non ce ne sono non compare niente), la firma.
-- **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** lampeggia a colori con scritto «costa caro»,
+- **MODELLO**: il modello in uso (cambia subito col `/model`; un **Fable** sta in un riquadro rosso fisso con scritto «costa caro»,
   un **Haiku** in bianco e nero) e quanto è piena la memoria della chat, cioè il contesto: all'80% compare
   `⚠ quasi piena: fai /compact`.
 - **ABBONAMENTO**: i due limiti, quello delle 5 ore e quello della settimana: quanto hai usato, quanto resta e quando
