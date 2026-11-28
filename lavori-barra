@@ -19,8 +19,13 @@ export LC_ALL=C.UTF-8          # cosi' la lunghezza della riga si conta in carat
 #   --riga1  dove e con cosa:  macchina · modello · contesto · abbonamento · firma
 #   --conti  quanto costa:     tempo aperta · sessioni aperte · 💶 costo · 🪙 token · 📝 righe
 #   --tempi  tempo vero:       ✍ sessione · questo lavoro · tutti i lavori · per ultimo l'interruttore dello stile
-TEMPI=0; RIGA1=0; CONTI=0
-case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; --conti) CONTI=1; shift ;; esac
+# Dal 28/11 le righe sono QUATTRO, a pannello: un'etichetta colorata a sinistra e le voci in colonna, su fondo scuro
+#   --riga1    MACCHINA   macchina · lavoro · aperta da · sessioni aperte · firma
+#   --modello  MODELLO    modello · contesto · abbonamento
+#   --conti    COSTO      sessione · questo lavoro · agenti · token · righe
+#   --tempi    TEMPO      lavoro vero (sessione, lavoro, tutti) · per ultimo l'interruttore dello stile
+TEMPI=0; RIGA1=0; CONTI=0; MODELLO=0
+case "${1:-}" in --tempi) TEMPI=1; shift ;; --riga1) RIGA1=1; shift ;; --conti) CONTI=1; shift ;; --modello) MODELLO=1; shift ;; esac
 IDX=${LAVORI_DIR:-/etc/lavori}/indice.tsv
 PROG=${PROGETTI_CLAUDE:-$HOME/.claude/projects}
 FIRMA="Iacopo, 6 novembre 2026"          # nome e data FISSA: restano per sempre
@@ -198,25 +203,63 @@ PY
   [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && attivo="✍ lavoro vero (senza le pause): sessione $(dur "$a_sess") · questo lavoro $(dur "$a_lav") · tutti i lavori $(dur "$a_tut")"
 fi
 soldi(){ LC_ALL=C printf '%.0f $' "${1:-0}" 2>/dev/null; }   # dollari arrotondati
-unisci(){ local o="" x; for x in "$@"; do [ -n "$x" ] && o+="${o:+ · }$x"; done; printf '%s' "$o"; }
-if [ "$TEMPI" = 1 ]; then      # terza riga: tempo vero, poi (ultimo) l'interruttore dello stile, per intero
-  if [ "${2:-}" != senzafirma ]; then p_stile="✎ per la mod: iacopo off | on (ora $stile)"; else p_stile="iacopostyle $stile"; fi
-  printf '%s ' "$(unisci "$attivo" "$p_stile")"; exit 0
+# --- il pannello: colori di tmux (#[...]), non occupano posto. Fondo scuro (lo mette "lavori"), etichetta colorata,
+#     parole di contorno in grigio, valori in bianco grassetto, separatore sottile.
+G='#[fg=colour246,nobold]'; V='#[fg=colour231,bold]'; Z='#[default]'; SEP=" #[fg=colour240,nobold]│$Z "
+etichetta(){ printf '#[fg=colour232,bg=%s,bold] %-9s#[default] ' "$1" "$2"; }        # etichetta <colore> <nome>
+voce(){ printf '%s%s %s%s%s' "$G" "$1" "$V" "$2" "$Z"; }                             # voce <parola grigia> <valore bianco>
+perc(){ local c=colour114; [ "$1" -ge 60 ] && c=colour221; [ "$1" -ge 80 ] && c=colour203   # verde, giallo, rosso
+        printf '#[fg=%s,bold]%s%%%s' "$c" "$1" "$Z"; }
+fila(){ local o="" x; for x in "$@"; do [ -n "$x" ] && o+="${o:+$SEP}$x"; done; printf '%s' "$o"; }
+na=$(tmux list-sessions 2>/dev/null | grep -c .)
+if [ "$RIGA1" = 1 ]; then      # MACCHINA: dove sei
+  p_avv=""; [ -n "$avviso" ] && p_avv="#[fg=colour232,bg=colour221,bold] $avviso $Z"
+  p_mac=""; [ -n "$mac" ] && p_mac="$V${mac%% *}$Z $G${mac#* }$Z"; [ "$mac" = "${mac%% *}" ] && p_mac="$V$mac$Z"
+  if [ "$na" = 1 ]; then p_na="$V● 1$Z ${G}sessione aperta$Z"; else p_na="$V● $na$Z ${G}sessioni aperte$Z"; fi
+  p_firma=""; [ "${2:-}" != senzafirma ] && p_firma="$G$FIRMA$Z"
+  p_ap=""; [ -n "$tempo" ] && p_ap=$(voce "aperta da" "${tempo#⏱ }")
+  printf '%s%s ' "$(etichetta colour39 MACCHINA)" "$(fila "$p_avv" "$p_mac" "$(voce lavoro "$s")" "$p_ap" "$p_na" "$p_firma")"; exit 0
 fi
-if [ "$CONTI" = 1 ]; then      # seconda riga: tempo aperta, sessioni, quanto costa (listino API), token, righe
-  na=$(tmux list-sessions 2>/dev/null | grep -c .)
+if [ "$MODELLO" = 1 ]; then    # MODELLO: con cosa lavori e quanto ne resta
+  p_mod=""
+  if [ -n "$modello" ]; then
+    col="fg=colour231,bold"
+    if [ "$lampo" = 1 ]; then    # Fable: giro di colori ogni 2 secondi (scritta rossa, tranne su rosso e arancione)
+      giro=("fg=white,bg=red" "fg=red,bg=yellow" "fg=red,bg=magenta" "fg=red,bg=cyan" "fg=red,bg=blue" "fg=black,bg=colour208" "fg=red,bg=white")
+      col="${giro[$(( $(date +%s) / 2 % ${#giro[@]} ))]},bold"
+    elif [ "$lampo" = 2 ]; then  # Haiku: bianco e nero a inversione
+      if [ $(( $(date +%s) / 2 % 2 )) -eq 0 ]; then col="fg=black,bg=white,bold"; else col="fg=white,bg=black,bold"; fi
+    fi
+    p_mod="#[$col] $modello $Z"
+  fi
+  p_ctx=""
+  if [[ "${c_max:-}" =~ ^[0-9]+$ ]] && [ "$c_max" -gt 0 ]; then
+    p_ctx="$(voce contesto "$(nfmt "$c_ctx")") ${G}di $(nfmt "$c_max")$Z $(perc "$c_perc")"
+    [ "$c_perc" -ge 80 ] && p_ctx+=" #[fg=colour203,bold]⚠ fai /compact$Z"
+  fi
+  p_lim=""
+  [[ "${c_5h:-}" =~ ^[0-9]+$ ]] && p_lim="${G}5 ore$Z $(perc "$c_5h")"
+  [[ "${c_7g:-}" =~ ^[0-9]+$ ]] && p_lim+="${p_lim:+ $G·$Z }${G}settimana$Z $(perc "$c_7g")"
+  [ -n "$p_lim" ] && p_lim="${G}abbonamento usato:$Z $p_lim"
+  printf '%s%s ' "$(etichetta colour177 MODELLO)" "$(fila "$p_mod" "$p_ctx" "$p_lim")"; exit 0
+fi
+if [ "$CONTI" = 1 ]; then      # COSTO: quanto vale il lavoro, a listino API
   ses_usd=${c_costo:-${e_ses:-}}                         # il costo della sessione lo da' Claude Code; se manca, il nostro conto
   # il lavoro dalle conversazioni salvate (se Claude Code le ha compattate la storia vecchia puo' mancare):
   # non scende mai sotto la sessione
   [ -n "${e_lav:-}" ] && [ -n "$ses_usd" ] && e_lav=$(awk -v a="$e_lav" -v b="$ses_usd" 'BEGIN{printf "%.2f", (b>a)?b:a}')
-  p_soldi=""
-  if [ -n "${e_lav:-}" ]; then
-    p_soldi="💶 costo a listino: sessione $(soldi "$ses_usd") · questo lavoro ≈$(soldi "$e_lav")"
-    [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_soldi+=" (di cui agenti $(soldi "$e_ag"))"
-  fi
-  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok="🪙 token del lavoro $(nfmt "$t_lav")"
-  p_righe=""; [ -n "$c_righe" ] && p_righe="${c_righe/📝 /📝 righe in sessione }"
-  printf '%s ' "$(unisci "$tempo" "● $na aperte" "$p_soldi" "$p_tok" "$p_righe")"; exit 0
+  p_ses=""; [ -n "$ses_usd" ] && p_ses=$(voce sessione "$(soldi "$ses_usd")")
+  p_lav=""; [ -n "${e_lav:-}" ] && p_lav=$(voce "questo lavoro" "≈$(soldi "$e_lav")")
+  p_ag="";  [ -n "${e_ag:-}" ] && [ "${e_ag%.*}" != 0 ] && p_ag=$(voce "di cui agenti" "$(soldi "$e_ag")")
+  p_tok=""; [[ "${t_lav:-}" =~ ^[0-9]+$ ]] && p_tok=$(voce "token del lavoro" "$(nfmt "$t_lav")")
+  p_righe=""; [[ "${c_add:-}" =~ ^[0-9]+$ ]] && p_righe="${G}righe in sessione$Z #[fg=colour114,bold]+$c_add$Z #[fg=colour203,bold]−${c_tol:-0}$Z"
+  printf '%s%s ' "$(etichetta colour215 COSTO)" "$(fila "$p_ses" "$p_lav" "$p_ag" "$p_tok" "$p_righe" "${G}prezzi di listino API$Z")"; exit 0
+fi
+if [ "$TEMPI" = 1 ]; then      # TEMPO: da quanto e' aperta, quanto lavoro vero; per ultimo l'interruttore dello stile
+  p_vero=""
+  [[ "${a_sess:-}" =~ ^[0-9]+$ ]] && p_vero="${G}lavoro vero, senza le pause:$Z $(voce sessione "$(dur "$a_sess")") $G·$Z $(voce "questo lavoro" "$(dur "$a_lav")") $G·$Z $(voce "tutti i lavori" "$(dur "$a_tut")")"
+  if [ "${2:-}" != senzafirma ]; then p_stile="${G}✎ per la mod:$Z ${V}iacopo off | on$Z ${G}(ora $stile)$Z"; else p_stile="${G}iacopostyle $stile$Z"; fi
+  printf '%s%s ' "$(etichetta colour114 TEMPO)" "$(fila "$p_vero" "$p_stile")"; exit 0
 fi
 # ● sessioni aperte adesso
 na=$(tmux list-sessions 2>/dev/null | grep -c .)

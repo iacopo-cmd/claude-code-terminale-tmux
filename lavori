@@ -292,25 +292,19 @@ guida() {   # guida [europea|inglese|egiziana|plancia]: come si dispongono i pan
 stile_stato() { [ "$(head -1 "$DIR/stile" 2>/dev/null)" = off ] && echo off || echo on; }
 _pannelli_scambi() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '/lavori-risposte/{print $1}'; }
 _pannello_claude() { tmux list-panes -t "=$1:" -F '#{pane_id} #{pane_start_command}' 2>/dev/null | awk '!/lavori-risposte/{print $1; exit}'; }
-barra() {   # barra <sessione>: la scritta nella barra in basso, accanto al nome. C'e' sempre, anche con la mod spenta
-    local sess=$1
-    # 2026-11-14: una riga sola a sinistra, accanto al nome: macchina, contatori, comando della mod, firma.
-    # La scrive lavori-barra (si accorcia da sola se il terminale e' stretto); a destra non resta niente,
-    # e l'elenco delle finestre (ce n'e' sempre una sola) si toglie per lasciarle il posto.
+barra() {   # barra <sessione>: il pannello in basso, quattro righe. C'e' sempre, anche con la mod spenta
+    local sess=$1 n=0 riga
+    # 28/11: pannello su fondo scuro, una riga per argomento con l'etichetta colorata a sinistra (le scrive
+    # lavori-barra): MACCHINA, MODELLO, COSTO, TEMPO. L'elenco delle finestre di tmux non si mostra.
     local firma=""; [ -n "$FIRMA" ] || firma=" senzafirma"
     local cmd=/usr/local/bin/lavori-barra
-    tmux set-option -t "=$sess:" status-left "[#{session_name}] #($cmd --riga1 #{session_name}$firma)" 2>/dev/null || true
-    # seconda riga (24/11): i tempi VERI di lavoro, sessione · lavoro · tutti
-    tmux set-option -t "=$sess:" status 3 2>/dev/null || true
-    # la riga [0] va rimessa uguale a quella globale: impostando solo la [1] per la sessione, tmux svuota la [0]
-    tmux set-option -t "=$sess:" 'status-format[0]' "$(tmux show -gv 'status-format[0]' 2>/dev/null)" 2>/dev/null || true
-    tmux set-option -t "=$sess:" 'status-format[1]' "#[align=left] #($cmd --conti #{session_name}$firma)" 2>/dev/null || true
-    tmux set-option -t "=$sess:" 'status-format[2]' "#[align=left] #($cmd --tempi #{session_name}$firma)" 2>/dev/null || true
-    tmux set-option -t "=$sess:" status-left-length 220 2>/dev/null || true
+    tmux set-option -t "=$sess:" status 4 2>/dev/null || true
+    tmux set-option -t "=$sess:" status-style "bg=colour235,fg=colour246" 2>/dev/null || true
+    for riga in --riga1 --modello --conti --tempi; do
+        tmux set-option -t "=$sess:" "status-format[$n]" "#[align=left]#($cmd $riga #{session_name}$firma)" 2>/dev/null || true
+        n=$((n+1))
+    done
     tmux set-option -t "=$sess:" status-interval 2 2>/dev/null || true   # ogni 2 s: modello dal vivo e lampeggio se e' Fable
-    tmux set-option -t "=$sess:" status-right "" 2>/dev/null || true
-    tmux set-option -w -t "=$sess:" window-status-format "" 2>/dev/null || true
-    tmux set-option -w -t "=$sess:" window-status-current-format "" 2>/dev/null || true
 }
 vesti() {   # vesti <sessione> <nome> <colonne> <righe del terminale>: mette i pannelli degli scambi (se non ci sono gia')
     local sess=$1 nome=$2 col=$3 rig=$4 p lato=-h g

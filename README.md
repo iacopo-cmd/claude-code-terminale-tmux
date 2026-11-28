@@ -248,25 +248,28 @@ agganci il tuo bot Telegram o quello che usi); se sul sistema c'è un comando `a
 niente, stampa il testo.
 
 ### Barra di stato tmux
-Nelle sessioni aperte con `lavori` la barra in basso ha **tre righe**, tutte scritte per intero (la imposta `lavori`
-stesso, e resta anche con la mod spenta):
+Nelle sessioni aperte con `lavori` la barra in basso è un **pannello di quattro righe** su fondo scuro: ogni riga ha
+un'etichetta colorata a sinistra, le parole di contorno in grigio e i valori in bianco (la imposta `lavori` stesso,
+e resta anche con la mod spenta):
 
 ```
-[MioLavoro] mioserver 203.0.113.10 · 🧠 Opus 5.5 · 📦 contesto 461k/1.0M 46% · ⏳ abbonamento 5h 30% · 7gg 16% · Iacopo, 6 novembre 2026
- ⏱ 0h08m · ● 1 aperte · 💶 costo a listino: sessione 59 $ · questo lavoro ≈59 $ · 🪙 token del lavoro 73.2M · 📝 righe in sessione +292/-24
- ✍ lavoro vero (senza le pause): sessione 0h05m · questo lavoro 1h35m · tutti i lavori 102h · ✎ per la mod: iacopo off | on (ora on)
+ MACCHINA  mioserver 203.0.113.10 │ lavoro MioLavoro │ aperta da 0h13m │ ● 1 sessione aperta │ Iacopo, 6 novembre 2026
+ MODELLO   🧠 Opus 5.5 │ contesto 479k di 1.0M 48% │ abbonamento usato: 5 ore 7% · settimana 17%
+ COSTO     sessione 67 $ │ questo lavoro ≈67 $ │ token del lavoro 76.0M │ righe in sessione +292 −24 │ prezzi di listino API
+ TEMPO     lavoro vero, senza le pause: sessione 0h08m · questo lavoro 1h38m · tutti i lavori 102h │ ✎ per la mod: iacopo off | on (ora on)
 ```
 
-1. **Dove e con cosa**: la macchina (nome e indirizzo; `LAVORI_MACCHINA` la cambia o la toglie), il **modello** (cambia
-   subito col `/model`; un **Fable** lampeggia a colori col 💰, un **Haiku** in bianco e nero; i modelli che per te
-   sono a pagamento escono col 💰 se li scrivi, uno per riga, in `/etc/lavori/modelli-a-pagamento`), il **contesto**
-   attuale sul limite del modello (⚠ oltre l'80%: è il momento di `/compact`), i **limiti dell'abbonamento** (finestra
-   di 5 ore e settimana; ⚠ oltre l'80%), la firma.
-2. **Quanto costa**: ⏱ da quanto è aperta la sessione, ● sessioni aperte, 💶 **costo a listino API** della sessione e
-   del lavoro (anche con l'abbonamento dice quanto vale; a parte quello dei **sottoagenti**), 🪙 **token** del lavoro
-   (tutti e quattro i tipi: ingresso, uscita, cache scritta, cache letta), 📝 righe cambiate in questa sessione.
-3. **Tempo vero di lavoro**, calcolato dagli orari della conversazione (le pause di più di 1 minuto in cui nessuno
-   scrive non contano): questa sessione, questo lavoro, tutti i lavori; per ultimo l'interruttore dello stile.
+- **MACCHINA**: nome e indirizzo (`LAVORI_MACCHINA` li cambia o li toglie), il lavoro, da quanto è aperta la sessione,
+  quante sessioni sono aperte, la firma.
+- **MODELLO**: il modello (cambia subito col `/model`; un **Fable** lampeggia a colori col 💰, un **Haiku** in bianco e
+  nero; col 💰 anche i modelli che scrivi, uno per riga, in `/etc/lavori/modelli-a-pagamento`), il **contesto** attuale
+  sul limite del modello e i **limiti dell'abbonamento** (5 ore e settimana). Le percentuali sono verdi, gialle dal
+  60% e rosse dall'80%; col contesto all'80% compare `⚠ fai /compact`.
+- **COSTO**: a prezzi di listino API (anche con l'abbonamento dice quanto vale): la sessione, il lavoro, a parte i
+  **sottoagenti** quando ci sono; i **token** del lavoro (ingresso, uscita, cache scritta, cache letta); le righe
+  aggiunte e tolte in questa sessione.
+- **TEMPO**: il lavoro vero, dagli orari della conversazione (le pause di più di 1 minuto in cui nessuno scrive non
+  contano): questa sessione, questo lavoro, tutti i lavori; per ultimo l'interruttore dello stile.
 
 Da dove vengono i numeri: modello, contesto, limiti, costo e righe della sessione li passa Claude Code alla sua riga di
 stato (`~/.claude/avviso-tmux.sh` li salva in `/etc/lavori/claude/<sessione>.json`); i conti del lavoro si fanno dalle
